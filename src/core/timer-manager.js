@@ -37,6 +37,13 @@ class TimerManager {
     // 通知权限状态
     this.notificationPermission = null;
 
+    // 完成任务缓存
+    this.lastCompletedTask = {
+      taskId: null,
+      taskTitle: null,
+      completedAt: null
+    };
+
     this.initialized = false;
 
     console.log("[TimerManager] Created");
@@ -317,6 +324,13 @@ class TimerManager {
       taskTitle: this.taskTitle,
     });
 
+    // 保存完成的任务信息到缓存（在重置前保存）
+    this.lastCompletedTask = {
+      taskId: this.taskId,
+      taskTitle: this.taskTitle,
+      completedAt: Date.now()
+    };
+
     // 重置计时器状态
     setTimeout(() => {
       this.resetTimer();
@@ -565,6 +579,31 @@ class TimerManager {
       totalSeconds: this.totalSeconds,
       progress: this.totalSeconds > 0 ? (this.totalSeconds - this.remainingSeconds) / this.totalSeconds : 0,
     };
+  }
+
+  /**
+   * 获取任务信息（优先返回当前任务，如果没有则返回缓存的完成任务）
+   * @returns {Object|null} 任务信息 {taskId, taskTitle} 或 null
+   */
+  getTaskInfo() {
+    // 优先返回当前任务
+    if (this.taskId) {
+      return {
+        taskId: this.taskId,
+        taskTitle: this.taskTitle
+      };
+    }
+    
+    // 如果没有当前任务，返回缓存的完成任务
+    if (this.lastCompletedTask.taskId) {
+      return {
+        taskId: this.lastCompletedTask.taskId,
+        taskTitle: this.lastCompletedTask.taskTitle
+      };
+    }
+    
+    // 都没有则返回 null
+    return null;
   }
 
   /**

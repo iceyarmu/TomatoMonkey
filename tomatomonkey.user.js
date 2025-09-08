@@ -1334,6 +1334,13 @@ if (typeof window !== "undefined") {
     // 通知权限状态
     this.notificationPermission = null;
 
+    // 完成任务缓存
+    this.lastCompletedTask = {
+      taskId: null,
+      taskTitle: null,
+      completedAt: null
+    };
+
     this.initialized = false;
 
     console.log("[TimerManager] Created");
@@ -1614,6 +1621,13 @@ if (typeof window !== "undefined") {
       taskTitle: this.taskTitle,
     });
 
+    // 保存完成的任务信息到缓存（在重置前保存）
+    this.lastCompletedTask = {
+      taskId: this.taskId,
+      taskTitle: this.taskTitle,
+      completedAt: Date.now()
+    };
+
     // 重置计时器状态
     setTimeout(() => {
       this.resetTimer();
@@ -1862,6 +1876,31 @@ if (typeof window !== "undefined") {
       totalSeconds: this.totalSeconds,
       progress: this.totalSeconds > 0 ? (this.totalSeconds - this.remainingSeconds) / this.totalSeconds : 0,
     };
+  }
+
+  /**
+   * 获取任务信息（优先返回当前任务，如果没有则返回缓存的完成任务）
+   * @returns {Object|null} 任务信息 {taskId, taskTitle} 或 null
+   */
+  getTaskInfo() {
+    // 优先返回当前任务
+    if (this.taskId) {
+      return {
+        taskId: this.taskId,
+        taskTitle: this.taskTitle
+      };
+    }
+    
+    // 如果没有当前任务，返回缓存的完成任务
+    if (this.lastCompletedTask.taskId) {
+      return {
+        taskId: this.lastCompletedTask.taskId,
+        taskTitle: this.lastCompletedTask.taskTitle
+      };
+    }
+    
+    // 都没有则返回 null
+    return null;
   }
 
   /**
@@ -4258,9 +4297,10 @@ if (typeof window !== "undefined") {
    * 处理任务完成
    */
   async handleTaskComplete() {
-    if (this.taskManager && this.timerManager.taskId) {
+    const taskInfo = this.timerManager.getTaskInfo();
+    if (this.taskManager && taskInfo && taskInfo.taskId) {
       try {
-        const taskId = this.timerManager.taskId;
+        const taskId = taskInfo.taskId;
         // 标记任务为完成
         await this.taskManager.toggleTaskCompletion(taskId);
         // 增加番茄钟计数
@@ -4319,9 +4359,10 @@ if (typeof window !== "undefined") {
     const seconds = minutes * 60;
     
     // 使用 TimerManager 重新启动计时器
-    if (this.timerManager) {
-      const taskId = this.timerManager.taskId;
-      const taskTitle = this.timerManager.taskTitle;
+    const taskInfo = this.timerManager.getTaskInfo();
+    if (this.timerManager && taskInfo) {
+      const taskId = taskInfo.taskId;
+      const taskTitle = taskInfo.taskTitle;
       
       // 重新启动计时器
       await this.timerManager.startTimer(taskId, taskTitle, seconds);
@@ -6044,7 +6085,7 @@ background: rgba(60, 60, 60, 0.8);
             
             // 初始化专注页面
             this.focusPage = new FocusPage();
-            this.focusPage.initialize(this.timerManager);
+            this.focusPage.initialize(this.timerManager, this.taskManager);
             
             console.log('[TomatoMonkey] Core modules initialized');
         }

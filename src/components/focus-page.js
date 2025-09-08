@@ -854,9 +854,10 @@ class FocusPage {
    * 处理任务完成
    */
   async handleTaskComplete() {
-    if (this.taskManager && this.timerManager.taskId) {
+    const taskInfo = this.timerManager.getTaskInfo();
+    if (this.taskManager && taskInfo && taskInfo.taskId) {
       try {
-        const taskId = this.timerManager.taskId;
+        const taskId = taskInfo.taskId;
         // 标记任务为完成
         await this.taskManager.toggleTaskCompletion(taskId);
         // 增加番茄钟计数
@@ -915,9 +916,10 @@ class FocusPage {
     const seconds = minutes * 60;
     
     // 使用 TimerManager 重新启动计时器
-    if (this.timerManager) {
-      const taskId = this.timerManager.taskId;
-      const taskTitle = this.timerManager.taskTitle;
+    const taskInfo = this.timerManager.getTaskInfo();
+    if (this.timerManager && taskInfo) {
+      const taskId = taskInfo.taskId;
+      const taskTitle = taskInfo.taskTitle;
       
       // 重新启动计时器
       await this.timerManager.startTimer(taskId, taskTitle, seconds);

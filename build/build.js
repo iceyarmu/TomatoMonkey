@@ -253,7 +253,7 @@ function build() {
             
             // 初始化专注页面
             this.focusPage = new FocusPage();
-            this.focusPage.initialize(this.timerManager);
+            this.focusPage.initialize(this.timerManager, this.taskManager);
             
             console.log('[TomatoMonkey] Core modules initialized');
         }
