@@ -98,6 +98,7 @@ function build() {
     try {
         // Read source files
         const storageManager = readFile(path.join(SRC_DIR, 'core', 'storage-manager.js'));
+        const whitelistManager = readFile(path.join(SRC_DIR, 'core', 'whitelist-manager.js'));
         const taskManager = readFile(path.join(SRC_DIR, 'core', 'task-manager.js'));
         const settingsPanel = readFile(path.join(SRC_DIR, 'components', 'settings-panel.js'));
         const todoList = readFile(path.join(SRC_DIR, 'components', 'todo-list.js'));
@@ -105,6 +106,7 @@ function build() {
         
         // Extract module content
         const storageManagerContent = extractModuleContent(storageManager, 'StorageManager');
+        const whitelistManagerContent = extractModuleContent(whitelistManager, 'WhitelistManager');
         const taskManagerContent = extractModuleContent(taskManager, 'TaskManager');
         const settingsPanelContent = extractModuleContent(settingsPanel, 'SettingsPanel');
         const todoListContent = extractModuleContent(todoList, 'TodoList');
@@ -137,6 +139,11 @@ function build() {
      * StorageManager - 数据持久化管理器
      */
     ${storageManagerContent}
+
+    /**
+     * WhitelistManager - 网站白名单管理器
+     */
+    ${whitelistManagerContent}
     
     /**
      * TaskManager - 任务管理器
