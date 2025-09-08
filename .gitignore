@@ -1,2 +1,9 @@
 .claude
 .bmad-core
+node_modules
+dist
+.DS_Store
+.vscode
+.idea
+*.log
+*.tmp

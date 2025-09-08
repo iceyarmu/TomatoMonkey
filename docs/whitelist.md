@@ -3,6 +3,7 @@ chatgpt.com
 ghoststudio.net
 notion.so
 claude.ai
+anthropic.com
 github.com
 apple.com
 facebook.com

@@ -1,0 +1,52 @@
+{
+  "name": "tomatomonkey",
+  "version": "1.0.0",
+  "description": "专注时间管理工具：番茄钟技术与任务管理的结合",
+  "main": "tomatomonkey.user.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "prettier --check .",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "tampermonkey",
+    "pomodoro",
+    "todo",
+    "productivity",
+    "task-management"
+  ],
+  "author": "TomatoMonkey Team",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "prettier": "^3.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.spec.js",
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/**/*.spec.js",
+      "!src/**/*.test.js"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "html",
+      "lcov"
+    ],
+    "setupFilesAfterEnv": [],
+    "moduleFileExtensions": [
+      "js"
+    ],
+    "transform": {}
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
