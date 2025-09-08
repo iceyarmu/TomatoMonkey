@@ -1,0 +1,14 @@
+google.com
+chatgpt.com
+ghoststudio.net
+notion.so
+claude.ai
+github.com
+apple.com
+facebook.com
+meta.com
+langchain.com
+figma.com
+gaoding.com
+10.10.31.14
+39.106.57.54
