@@ -4,14 +4,15 @@
   "description": "专注时间管理工具：番茄钟技术与任务管理的结合",
   "main": "tomatomonkey.user.js",
   "scripts": {
+    "build": "node build/build.js",
+    "build:watch": "node build/watch.js",
+    "dev": "node build/dev-server.js",
+    "kill": "node build/kill-port.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "prettier --check .",
-    "format": "prettier --write .",
-    "bmad:refresh": "bmad-method install -f -i codex",
-    "bmad:list": "bmad-method list:agents",
-    "bmad:validate": "bmad-method validate"
+    "format": "prettier --write ."
   },
   "keywords": [
     "tampermonkey",
