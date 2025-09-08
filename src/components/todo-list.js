@@ -289,7 +289,7 @@ class TodoList {
    * @param {string} taskId - 任务ID
    * @param {string} taskTitle - 任务标题
    */
-  startFocusSession(taskId, taskTitle) {
+  async startFocusSession(taskId, taskTitle) {
     try {
       // 获取TimerManager实例
       const timerManager = window.TimerManager ? window.TimerManager.getInstance() : null;
@@ -309,8 +309,8 @@ class TodoList {
         timerManager.stopTimer(true);
       }
 
-      // 启动计时器 (默认25分钟)
-      const started = timerManager.startTimer(taskId, taskTitle, 1500);
+      // 启动计时器 (默认25分钟) - 现在是异步调用，会在此时请求通知权限
+      const started = await timerManager.startTimer(taskId, taskTitle, 1500);
       
       if (started) {
         console.log(`[TodoList] Started focus session for task: ${taskTitle}`);

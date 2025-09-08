@@ -82,6 +82,18 @@
         <div id="focus-result" class="result"></div>
     </div>
 
+    <div class="test-section">
+        <h2>Test 5: Time Modification Feature</h2>
+        <button class="test-button" onclick="testTimeModification()">Test Time Modification</button>
+        <div id="time-modify-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 6: Timer Completion Interactive Buttons</h2>
+        <button class="test-button" onclick="testCompletionButtons()">Test Completion Buttons (5 seconds)</button>
+        <div id="completion-buttons-result" class="result"></div>
+    </div>
+
     <!-- Mock GM functions -->
     <script>
         // Mock Tampermonkey functions
@@ -157,7 +169,7 @@
 
         // Test 2: Timer Start
         let timerManager = null;
-        function testTimerStart() {
+        async function testTimerStart() {
             const resultId = 'timer-result';
             document.getElementById(resultId).innerHTML = '';
             
@@ -170,7 +182,7 @@
                 log(resultId, '✓ TimerManager instance found');
 
                 // Initialize with storage manager
-                timerManager.initialize(window.storageManager);
+                await timerManager.initialize(window.storageManager);
                 log(resultId, '✓ TimerManager initialized');
 
                 // Add observer to track events
@@ -178,10 +190,12 @@
                     log(resultId, `Event: ${event} - ${JSON.stringify(data)}`);
                 });
 
-                // Start timer (5 seconds for quick test)
-                const started = timerManager.startTimer('test-task-1', 'Test Task <script>alert("XSS")</script>', 5);
+                // Start timer (5 seconds for quick test) - now requests notification permission
+                log(resultId, 'ℹ️ Starting timer - this will request notification permission');
+                const started = await timerManager.startTimer('test-task-1', 'Test Task <script>alert("XSS")</script>', 5);
                 if (started) {
                     log(resultId, '✅ TIMER STARTED WITHOUT CRASH - AC3 SHOULD WORK');
+                    log(resultId, '✅ NOTIFICATION PERMISSION REQUESTED AT RIGHT TIME');
                 } else {
                     throw new Error('Timer failed to start');
                 }
@@ -274,6 +288,121 @@
             if (focusPage) {
                 focusPage.hide();
                 log('focus-result', '✓ Focus page hidden');
+            }
+        }
+
+        // Test 5: Time Modification Feature
+        async function testTimeModification() {
+            const resultId = 'time-modify-result';
+            document.getElementById(resultId).innerHTML = '';
+            
+            try {
+                // Get TimerManager and start a timer first
+                const tm = window.TimerManager ? window.TimerManager.getInstance() : null;
+                if (!tm) {
+                    throw new Error('TimerManager not found');
+                }
+                log(resultId, '✓ TimerManager instance found');
+
+                // Initialize if needed
+                await tm.initialize(window.storageManager);
+                log(resultId, '✓ TimerManager initialized');
+
+                // Start a timer (10 seconds for quick test)
+                const started = await tm.startTimer('test-modify', 'Time Modification Test', 10);
+                if (!started) {
+                    throw new Error('Failed to start timer');
+                }
+                log(resultId, '✓ Timer started with 10 seconds');
+
+                // Test the modifyTimer method
+                const modified = tm.modifyTimer(50 * 60); // 50 minutes in seconds
+                if (modified) {
+                    log(resultId, '✓ Timer successfully modified to 50 minutes');
+                    log(resultId, `✓ New total time: ${tm.totalSeconds} seconds (${Math.ceil(tm.totalSeconds/60)} minutes)`);
+                    log(resultId, `✓ Remaining time: ${tm.remainingSeconds} seconds`);
+                } else {
+                    throw new Error('Failed to modify timer');
+                }
+
+                // Test invalid modification
+                const invalidModified = tm.modifyTimer(0);
+                if (!invalidModified) {
+                    log(resultId, '✓ Correctly rejected invalid time modification');
+                } else {
+                    throw new Error('Should have rejected invalid time');
+                }
+
+                // Show focus page to see the modify time button
+                if (!focusPage) {
+                    focusPage = new window.FocusPage();
+                    focusPage.initialize(tm);
+                }
+
+                // Simulate timer started event to show the page
+                focusPage.onTimerStarted({
+                    taskTitle: 'Time Modification Test',
+                    remainingSeconds: tm.remainingSeconds,
+                    totalSeconds: tm.totalSeconds
+                });
+
+                log(resultId, '✅ TIME MODIFICATION FEATURE WORKING');
+                log(resultId, 'ℹ️ Check focus page - "修改时间" button should be visible');
+                log(resultId, 'ℹ️ Click "修改时间" to test modal interface');
+
+            } catch (error) {
+                log(resultId, `❌ Error: ${error.message}`, true);
+            }
+        }
+
+        // Test 6: Timer Completion Interactive Buttons
+        async function testCompletionButtons() {
+            const resultId = 'completion-buttons-result';
+            document.getElementById(resultId).innerHTML = '';
+            
+            try {
+                // Get TimerManager and TaskManager
+                const tm = window.TimerManager ? window.TimerManager.getInstance() : null;
+                const taskMgr = window.taskManager;
+                
+                if (!tm || !taskMgr) {
+                    throw new Error('TimerManager or TaskManager not found');
+                }
+                log(resultId, '✓ TimerManager and TaskManager instances found');
+
+                // Initialize managers
+                await tm.initialize(window.storageManager);
+                await taskMgr.initialize(window.storageManager);
+                log(resultId, '✓ Managers initialized');
+
+                // Create a test task
+                const testTask = await taskMgr.createTask('Test Completion Buttons Task');
+                log(resultId, `✓ Created test task: ${testTask.title}`);
+
+                // Initialize FocusPage with both managers
+                if (!focusPage) {
+                    focusPage = new window.FocusPage();
+                    focusPage.initialize(tm, taskMgr);
+                    log(resultId, '✓ FocusPage initialized with both managers');
+                }
+
+                // Start timer (5 seconds for quick test)
+                const started = await tm.startTimer(testTask.id, testTask.title, 5);
+                if (started) {
+                    log(resultId, '✓ 5-second timer started');
+                    log(resultId, '⏳ Wait for timer to complete...');
+                    log(resultId, '✅ COMPLETION BUTTONS SHOULD APPEAR AFTER 5 SECONDS');
+                    log(resultId, 'ℹ️ Expected buttons: "✅ 任务完成", "❌ 取消", "⏰ 增加时间"');
+                    log(resultId, 'ℹ️ Test each button:');
+                    log(resultId, '  - "任务完成": Should mark task as complete and close page');
+                    log(resultId, '  - "取消": Should close page without marking complete');
+                    log(resultId, '  - "增加时间": Should open modal with 5/10/15/30 min options');
+                } else {
+                    throw new Error('Failed to start timer');
+                }
+
+            } catch (error) {
+                log(resultId, `❌ Error: ${error.message}`, true);
             }
         }
 

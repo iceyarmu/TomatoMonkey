@@ -53,8 +53,8 @@ class TimerManager {
 
     this.storageManager = storageManager;
     
-    // 检查通知权限
-    await this.checkNotificationPermission();
+    // 初始化通知权限状态（不请求权限）
+    this.initializeNotificationStatus();
     
     // 恢复计时器状态
     await this.restoreTimerState();
@@ -64,7 +64,25 @@ class TimerManager {
   }
 
   /**
-   * 检查并请求通知权限
+   * 初始化通知权限状态（不请求权限）
+   */
+  initializeNotificationStatus() {
+    // 更健壮的 Notification API 检测
+    const NotificationAPI = (typeof window !== 'undefined' && window.Notification) 
+      ? window.Notification 
+      : (typeof Notification !== 'undefined' ? Notification : null);
+    
+    if (!NotificationAPI) {
+      this.notificationPermission = "unsupported";
+      console.warn("[TimerManager] Browser does not support notifications");
+    } else {
+      this.notificationPermission = NotificationAPI.permission;
+      console.log(`[TimerManager] Initial notification permission: ${this.notificationPermission}`);
+    }
+  }
+
+  /**
+   * 检查并请求通知权限（延迟加载，仅在需要时请求）
    */
   async checkNotificationPermission() {
     // 更健壮的 Notification API 检测
@@ -78,17 +96,22 @@ class TimerManager {
       return;
     }
 
+    // 更新当前权限状态
     this.notificationPermission = NotificationAPI.permission;
     
+    // 仅在权限为 default 时请求权限
     if (this.notificationPermission === "default") {
       try {
+        console.log("[TimerManager] Requesting notification permission for focus session");
         const permission = await NotificationAPI.requestPermission();
         this.notificationPermission = permission;
-        console.log(`[TimerManager] Notification permission: ${permission}`);
+        console.log(`[TimerManager] Notification permission result: ${permission}`);
       } catch (error) {
         console.error("[TimerManager] Failed to request notification permission:", error);
         this.notificationPermission = "denied";
       }
+    } else {
+      console.log(`[TimerManager] Using existing notification permission: ${this.notificationPermission}`);
     }
   }
 
@@ -98,11 +121,14 @@ class TimerManager {
    * @param {string} taskTitle - 任务标题
    * @param {number} duration - 计时时长（秒），默认25分钟
    */
-  startTimer(taskId, taskTitle, duration = 1500) {
+  async startTimer(taskId, taskTitle, duration = 1500) {
     if (this.status === "running") {
       console.warn("[TimerManager] Timer is already running");
       return false;
     }
+
+    // 在启动计时器前检查和请求通知权限
+    await this.checkNotificationPermission();
 
     this.taskId = taskId;
     this.taskTitle = taskTitle;
@@ -182,6 +208,58 @@ class TimerManager {
     }
 
     console.log("[TimerManager] Timer stopped");
+    return true;
+  }
+
+  /**
+   * 修改计时器时长
+   * @param {number} newDuration - 新的计时时长（秒）
+   * @returns {boolean} 修改是否成功
+   */
+  modifyTimer(newDuration) {
+    if (this.status !== "running" && this.status !== "paused") {
+      console.warn("[TimerManager] Cannot modify timer when not running or paused");
+      return false;
+    }
+
+    // 验证新时长
+    if (!Number.isInteger(newDuration) || newDuration <= 0 || newDuration > 7200) {
+      console.error("[TimerManager] Invalid duration. Must be between 1 and 7200 seconds");
+      return false;
+    }
+
+    const wasRunning = this.status === "running";
+    
+    // 如果正在运行，先停止倒计时
+    if (wasRunning) {
+      this.clearCountdown();
+    }
+
+    // 更新时长
+    const oldDuration = this.totalSeconds;
+    this.totalSeconds = newDuration;
+    this.remainingSeconds = newDuration;
+    this.startTime = Date.now();
+
+    // 如果之前是运行状态，重新开始倒计时
+    if (wasRunning) {
+      this.startCountdown();
+    }
+
+    // 保存状态
+    this.saveTimerState();
+
+    // 通知观察者
+    this.notifyObservers("timerModified", {
+      taskId: this.taskId,
+      taskTitle: this.taskTitle,
+      oldDuration: oldDuration,
+      newDuration: newDuration,
+      totalSeconds: this.totalSeconds,
+      remainingSeconds: this.remainingSeconds,
+    });
+
+    console.log(`[TimerManager] Timer duration modified from ${oldDuration}s to ${newDuration}s`);
     return true;
   }
 

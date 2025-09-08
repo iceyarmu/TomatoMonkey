@@ -160,6 +160,32 @@ describe("TimerManager", () => {
       
       global.Notification = originalNotification;
     });
+
+    test("初始化时不应该请求通知权限", async () => {
+      const requestSpy = jest.spyOn(global.Notification, 'requestPermission');
+      global.Notification.permission = 'default';
+      
+      const newTimerManager = new TimerManager();
+      await newTimerManager.initialize(storageManager);
+      
+      expect(requestSpy).not.toHaveBeenCalled();
+      expect(newTimerManager.notificationPermission).toBe('default');
+      
+      requestSpy.mockRestore();
+    });
+
+    test("启动计时器时应该请求通知权限", async () => {
+      const requestSpy = jest.spyOn(global.Notification, 'requestPermission').mockResolvedValue('granted');
+      global.Notification.permission = 'default';
+      timerManager.notificationPermission = 'default';
+      
+      await timerManager.startTimer("task-1", "测试任务", 1500);
+      
+      expect(requestSpy).toHaveBeenCalled();
+      expect(timerManager.notificationPermission).toBe('granted');
+      
+      requestSpy.mockRestore();
+    });
   });
 
   describe("计时器操作", () => {
@@ -167,8 +193,8 @@ describe("TimerManager", () => {
       await timerManager.initialize(storageManager);
     });
 
-    test("应该能启动计时器", () => {
-      const result = timerManager.startTimer("task-1", "测试任务", 1500);
+    test("应该能启动计时器", async () => {
+      const result = await timerManager.startTimer("task-1", "测试任务", 1500);
       
       expect(result).toBe(true);
       expect(timerManager.status).toBe("running");
@@ -179,16 +205,16 @@ describe("TimerManager", () => {
       expect(global.setInterval).toHaveBeenCalled();
     });
 
-    test("运行中的计时器不应该被重新启动", () => {
-      timerManager.startTimer("task-1", "测试任务", 1500);
-      const result = timerManager.startTimer("task-2", "另一个任务", 1500);
+    test("运行中的计时器不应该被重新启动", async () => {
+      await timerManager.startTimer("task-1", "测试任务", 1500);
+      const result = await timerManager.startTimer("task-2", "另一个任务", 1500);
       
       expect(result).toBe(false);
       expect(timerManager.taskId).toBe("task-1"); // 应该保持原来的任务
     });
 
-    test("应该能暂停运行中的计时器", () => {
-      timerManager.startTimer("task-1", "测试任务", 1500);
+    test("应该能暂停运行中的计时器", async () => {
+      await timerManager.startTimer("task-1", "测试任务", 1500);
       const result = timerManager.pauseTimer();
       
       expect(result).toBe(true);

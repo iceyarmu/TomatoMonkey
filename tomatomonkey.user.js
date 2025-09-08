@@ -1350,8 +1350,8 @@ if (typeof window !== "undefined") {
 
     this.storageManager = storageManager;
     
-    // 检查通知权限
-    await this.checkNotificationPermission();
+    // 初始化通知权限状态（不请求权限）
+    this.initializeNotificationStatus();
     
     // 恢复计时器状态
     await this.restoreTimerState();
@@ -1361,7 +1361,25 @@ if (typeof window !== "undefined") {
   }
 
   /**
-   * 检查并请求通知权限
+   * 初始化通知权限状态（不请求权限）
+   */
+  initializeNotificationStatus() {
+    // 更健壮的 Notification API 检测
+    const NotificationAPI = (typeof window !== 'undefined' && window.Notification) 
+      ? window.Notification 
+      : (typeof Notification !== 'undefined' ? Notification : null);
+    
+    if (!NotificationAPI) {
+      this.notificationPermission = "unsupported";
+      console.warn("[TimerManager] Browser does not support notifications");
+    } else {
+      this.notificationPermission = NotificationAPI.permission;
+      console.log(`[TimerManager] Initial notification permission: ${this.notificationPermission}`);
+    }
+  }
+
+  /**
+   * 检查并请求通知权限（延迟加载，仅在需要时请求）
    */
   async checkNotificationPermission() {
     // 更健壮的 Notification API 检测
@@ -1375,17 +1393,22 @@ if (typeof window !== "undefined") {
       return;
     }
 
+    // 更新当前权限状态
     this.notificationPermission = NotificationAPI.permission;
     
+    // 仅在权限为 default 时请求权限
     if (this.notificationPermission === "default") {
       try {
+        console.log("[TimerManager] Requesting notification permission for focus session");
         const permission = await NotificationAPI.requestPermission();
         this.notificationPermission = permission;
-        console.log(`[TimerManager] Notification permission: ${permission}`);
+        console.log(`[TimerManager] Notification permission result: ${permission}`);
       } catch (error) {
         console.error("[TimerManager] Failed to request notification permission:", error);
         this.notificationPermission = "denied";
       }
+    } else {
+      console.log(`[TimerManager] Using existing notification permission: ${this.notificationPermission}`);
     }
   }
 
@@ -1395,11 +1418,14 @@ if (typeof window !== "undefined") {
    * @param {string} taskTitle - 任务标题
    * @param {number} duration - 计时时长（秒），默认25分钟
    */
-  startTimer(taskId, taskTitle, duration = 1500) {
+  async startTimer(taskId, taskTitle, duration = 1500) {
     if (this.status === "running") {
       console.warn("[TimerManager] Timer is already running");
       return false;
     }
+
+    // 在启动计时器前检查和请求通知权限
+    await this.checkNotificationPermission();
 
     this.taskId = taskId;
     this.taskTitle = taskTitle;
@@ -1479,6 +1505,58 @@ if (typeof window !== "undefined") {
     }
 
     console.log("[TimerManager] Timer stopped");
+    return true;
+  }
+
+  /**
+   * 修改计时器时长
+   * @param {number} newDuration - 新的计时时长（秒）
+   * @returns {boolean} 修改是否成功
+   */
+  modifyTimer(newDuration) {
+    if (this.status !== "running" && this.status !== "paused") {
+      console.warn("[TimerManager] Cannot modify timer when not running or paused");
+      return false;
+    }
+
+    // 验证新时长
+    if (!Number.isInteger(newDuration) || newDuration <= 0 || newDuration > 7200) {
+      console.error("[TimerManager] Invalid duration. Must be between 1 and 7200 seconds");
+      return false;
+    }
+
+    const wasRunning = this.status === "running";
+    
+    // 如果正在运行，先停止倒计时
+    if (wasRunning) {
+      this.clearCountdown();
+    }
+
+    // 更新时长
+    const oldDuration = this.totalSeconds;
+    this.totalSeconds = newDuration;
+    this.remainingSeconds = newDuration;
+    this.startTime = Date.now();
+
+    // 如果之前是运行状态，重新开始倒计时
+    if (wasRunning) {
+      this.startCountdown();
+    }
+
+    // 保存状态
+    this.saveTimerState();
+
+    // 通知观察者
+    this.notifyObservers("timerModified", {
+      taskId: this.taskId,
+      taskTitle: this.taskTitle,
+      oldDuration: oldDuration,
+      newDuration: newDuration,
+      totalSeconds: this.totalSeconds,
+      remainingSeconds: this.remainingSeconds,
+    });
+
+    console.log(`[TimerManager] Timer duration modified from ${oldDuration}s to ${newDuration}s`);
     return true;
   }
 
@@ -3005,7 +3083,7 @@ class TodoList {
    * @param {string} taskId - 任务ID
    * @param {string} taskTitle - 任务标题
    */
-  startFocusSession(taskId, taskTitle) {
+  async startFocusSession(taskId, taskTitle) {
     try {
       // 获取TimerManager实例
       const timerManager = window.TimerManager ? window.TimerManager.getInstance() : null;
@@ -3025,8 +3103,8 @@ class TodoList {
         timerManager.stopTimer(true);
       }
 
-      // 启动计时器 (默认25分钟)
-      const started = timerManager.startTimer(taskId, taskTitle, 1500);
+      // 启动计时器 (默认25分钟) - 现在是异步调用，会在此时请求通知权限
+      const started = await timerManager.startTimer(taskId, taskTitle, 1500);
       
       if (started) {
         console.log(`[TodoList] Started focus session for task: ${taskTitle}`);
@@ -3360,13 +3438,15 @@ if (typeof window !== "undefined") {
   /**
    * 初始化专注页面
    * @param {TimerManager} timerManager - 计时器管理器实例
+   * @param {TaskManager} taskManager - 任务管理器实例
    */
-  initialize(timerManager) {
+  initialize(timerManager, taskManager) {
     if (this.isInitialized) {
       return;
     }
 
     this.timerManager = timerManager;
+    this.taskManager = taskManager;
     this.createPageStructure();
     this.bindTimerManager();
 
@@ -3411,14 +3491,82 @@ if (typeof window !== "undefined") {
           <button type="button" class="focus-action-btn resume-btn hidden" id="resume-btn">
             继续
           </button>
+          <button type="button" class="focus-action-btn modify-time-btn hidden" id="modify-time-btn">
+            修改时间
+          </button>
           <button type="button" class="focus-action-btn stop-btn hidden" id="stop-btn">
             结束专注
+          </button>
+          
+          <!-- 倒计时完成后的操作按钮 -->
+          <button type="button" class="focus-action-btn complete-btn hidden" id="complete-btn">
+            ✅ 任务完成
+          </button>
+          <button type="button" class="focus-action-btn cancel-complete-btn hidden" id="cancel-complete-btn">
+            ❌ 取消
+          </button>
+          <button type="button" class="focus-action-btn extend-time-btn hidden" id="extend-time-btn">
+            ⏰ 增加时间
           </button>
         </div>
         
         <div class="focus-info">
           <div class="focus-hint">
             保持专注，距离完成还有一段时间
+          </div>
+        </div>
+      </div>
+      
+      <!-- Time Modification Modal -->
+      <div class="time-modify-modal hidden" id="time-modify-modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>设置专注时间</h3>
+          </div>
+          <div class="modal-body">
+            <div class="time-input-group">
+              <label for="time-input">专注时长 (分钟)</label>
+              <input type="number" id="time-input" class="time-input" 
+                     min="1" max="120" placeholder="输入分钟数 (如: 50)">
+            </div>
+            <div class="time-presets">
+              <button type="button" class="preset-btn" data-minutes="25">25分钟</button>
+              <button type="button" class="preset-btn" data-minutes="30">30分钟</button>
+              <button type="button" class="preset-btn" data-minutes="45">45分钟</button>
+              <button type="button" class="preset-btn" data-minutes="60">60分钟</button>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="modal-btn cancel-btn" id="cancel-time-btn">取消</button>
+            <button type="button" class="modal-btn confirm-btn" id="confirm-time-btn">确定</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Extend Time Modal -->
+      <div class="time-modify-modal hidden" id="extend-time-modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>增加专注时间</h3>
+          </div>
+          <div class="modal-body">
+            <div class="time-input-group">
+              <label for="extend-time-input">增加时长 (分钟)</label>
+              <input type="number" id="extend-time-input" class="time-input" 
+                     min="1" max="60" value="15" placeholder="输入分钟数 (如: 15)">
+            </div>
+            <div class="time-presets">
+              <button type="button" class="preset-btn" data-minutes="5">5分钟</button>
+              <button type="button" class="preset-btn" data-minutes="10">10分钟</button>
+              <button type="button" class="preset-btn selected" data-minutes="15">15分钟</button>
+              <button type="button" class="preset-btn" data-minutes="30">30分钟</button>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="modal-btn cancel-btn" id="cancel-extend-btn">取消</button>
+            <button type="button" class="modal-btn confirm-btn" id="confirm-extend-btn">确认</button>
           </div>
         </div>
       </div>
@@ -3463,15 +3611,52 @@ if (typeof window !== "undefined") {
       this.showStopConfirmation();
     });
 
+    // 修改时间按钮
+    const modifyTimeBtn = this.container.querySelector("#modify-time-btn");
+    modifyTimeBtn.addEventListener("click", () => {
+      this.showTimeModificationModal();
+    });
+
+    // 完成按钮
+    const completeBtn = this.container.querySelector("#complete-btn");
+    if (completeBtn) {
+      completeBtn.addEventListener("click", () => this.handleTaskComplete());
+    }
+
+    // 取消按钮
+    const cancelCompleteBtn = this.container.querySelector("#cancel-complete-btn");
+    if (cancelCompleteBtn) {
+      cancelCompleteBtn.addEventListener("click", () => this.hide());
+    }
+
+    // 增加时间按钮
+    const extendTimeBtn = this.container.querySelector("#extend-time-btn");
+    if (extendTimeBtn) {
+      extendTimeBtn.addEventListener("click", () => this.handleExtendTime());
+    }
+
+    // 时间修改模态框事件
+    this.setupModalEventListeners();
+
+    // 增加时间模态框事件
+    this.setupExtendTimeModalEventListeners();
+
     // 点击遮罩层不做任何操作（避免意外关闭）
     this.container.querySelector(".focus-page-overlay").addEventListener("click", (e) => {
       e.stopPropagation();
     });
 
-    // ESC键退出确认
+    // ESC键处理
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.isVisible) {
-        this.showStopConfirmation();
+        // 如果模态框打开，先关闭模态框
+        if (this.isTimeModalVisible()) {
+          this.hideTimeModificationModal();
+        } else if (this.isExtendTimeModalVisible()) {
+          this.hideExtendTimeModal();
+        } else {
+          this.showStopConfirmation();
+        }
       }
     });
   }
@@ -3483,6 +3668,190 @@ if (typeof window !== "undefined") {
     const confirmed = confirm("确定要结束当前的专注时间吗？\n\n这将停止计时器并返回任务列表。");
     if (confirmed && this.timerManager) {
       this.timerManager.stopTimer();
+    }
+  }
+
+  /**
+   * 设置模态框事件监听器
+   */
+  setupModalEventListeners() {
+    const modal = this.container.querySelector("#time-modify-modal");
+    const cancelBtn = this.container.querySelector("#cancel-time-btn");
+    const confirmBtn = this.container.querySelector("#confirm-time-btn");
+    const timeInput = this.container.querySelector("#time-input");
+    const presetBtns = this.container.querySelectorAll(".preset-btn");
+    const modalOverlay = this.container.querySelector(".modal-overlay");
+
+    // 取消按钮
+    cancelBtn.addEventListener("click", () => {
+      this.hideTimeModificationModal();
+    });
+
+    // 确认按钮
+    confirmBtn.addEventListener("click", () => {
+      this.handleTimeModification();
+    });
+
+    // 点击遮罩层关闭模态框
+    modalOverlay.addEventListener("click", () => {
+      this.hideTimeModificationModal();
+    });
+
+    // 预设按钮
+    presetBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        // 移除其他按钮的选中状态
+        presetBtns.forEach(b => b.classList.remove("selected"));
+        // 选中当前按钮
+        btn.classList.add("selected");
+        // 设置输入值
+        const minutes = parseInt(btn.dataset.minutes);
+        timeInput.value = minutes;
+      });
+    });
+
+    // 输入框变化时取消预设选择
+    timeInput.addEventListener("input", () => {
+      presetBtns.forEach(btn => btn.classList.remove("selected"));
+    });
+
+    // 回车键确认
+    timeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        this.handleTimeModification();
+      }
+    });
+  }
+
+  /**
+   * 设置增加时间模态框事件监听器
+   */
+  setupExtendTimeModalEventListeners() {
+    const modal = this.container.querySelector("#extend-time-modal");
+    const cancelBtn = this.container.querySelector("#cancel-extend-btn");
+    const confirmBtn = this.container.querySelector("#confirm-extend-btn");
+    const timeInput = this.container.querySelector("#extend-time-input");
+    const presetBtns = modal.querySelectorAll(".preset-btn");
+    const modalOverlay = modal.querySelector(".modal-overlay");
+
+    // 取消按钮
+    cancelBtn.addEventListener("click", () => {
+      this.hideExtendTimeModal();
+    });
+
+    // 确认按钮
+    confirmBtn.addEventListener("click", () => {
+      this.confirmExtendTime();
+    });
+
+    // 点击遮罩层关闭模态框
+    modalOverlay.addEventListener("click", () => {
+      this.hideExtendTimeModal();
+    });
+
+    // 预设按钮
+    presetBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        // 移除其他按钮的选中状态
+        presetBtns.forEach(b => b.classList.remove("selected"));
+        // 选中当前按钮
+        btn.classList.add("selected");
+        // 设置输入值
+        const minutes = parseInt(btn.dataset.minutes);
+        timeInput.value = minutes;
+      });
+    });
+
+    // 输入框变化时取消预设选择
+    timeInput.addEventListener("input", () => {
+      presetBtns.forEach(btn => btn.classList.remove("selected"));
+      // 找到匹配的预设按钮并选中
+      const value = parseInt(timeInput.value);
+      const matchingBtn = Array.from(presetBtns).find(btn => parseInt(btn.dataset.minutes) === value);
+      if (matchingBtn) {
+        matchingBtn.classList.add("selected");
+      }
+    });
+
+    // 回车键确认
+    timeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        this.confirmExtendTime();
+      }
+    });
+  }
+
+  /**
+   * 显示时间修改模态框
+   */
+  showTimeModificationModal() {
+    const modal = this.container.querySelector("#time-modify-modal");
+    const timeInput = this.container.querySelector("#time-input");
+    const presetBtns = this.container.querySelectorAll(".preset-btn");
+    
+    if (!this.timerManager) return;
+
+    // 设置当前时间为默认值
+    const currentMinutes = Math.ceil(this.timerManager.totalSeconds / 60);
+    timeInput.value = currentMinutes;
+
+    // 检查是否有匹配的预设按钮
+    presetBtns.forEach(btn => {
+      btn.classList.remove("selected");
+      if (parseInt(btn.dataset.minutes) === currentMinutes) {
+        btn.classList.add("selected");
+      }
+    });
+
+    // 显示模态框
+    modal.classList.remove("hidden");
+    
+    // 聚焦输入框
+    setTimeout(() => {
+      timeInput.focus();
+      timeInput.select();
+    }, 100);
+  }
+
+  /**
+   * 隐藏时间修改模态框
+   */
+  hideTimeModificationModal() {
+    const modal = this.container.querySelector("#time-modify-modal");
+    modal.classList.add("hidden");
+  }
+
+  /**
+   * 检查时间修改模态框是否可见
+   */
+  isTimeModalVisible() {
+    const modal = this.container.querySelector("#time-modify-modal");
+    return modal && !modal.classList.contains("hidden");
+  }
+
+  /**
+   * 处理时间修改
+   */
+  handleTimeModification() {
+    const timeInput = this.container.querySelector("#time-input");
+    const minutes = parseInt(timeInput.value);
+
+    // 验证输入
+    if (isNaN(minutes) || minutes < 1 || minutes > 120) {
+      alert("请输入有效的时间（1-120分钟）");
+      timeInput.focus();
+      return;
+    }
+
+    // 转换为秒
+    const seconds = minutes * 60;
+
+    // 调用TimerManager修改时间
+    if (this.timerManager && this.timerManager.modifyTimer(seconds)) {
+      this.hideTimeModificationModal();
+      console.log(`[FocusPage] Timer modified to ${minutes} minutes`);
+    } else {
+      alert("修改时间失败，请重试");
     }
   }
 
@@ -3529,6 +3898,9 @@ if (typeof window !== "undefined") {
       case "timerStopped":
         this.onTimerStopped(data);
         break;
+      case "timerModified":
+        this.onTimerModified(data);
+        break;
     }
   }
 
@@ -3543,6 +3915,9 @@ if (typeof window !== "undefined") {
     this.updateProgress(0);
     this.show();
     this.showActionButtons(true);
+    
+    // 确保完成按钮在计时器开始时被隐藏
+    this.hideCompletionButtons();
     
     console.log("[FocusPage] Timer started, showing focus page");
   }
@@ -3584,12 +3959,10 @@ if (typeof window !== "undefined") {
     this.updateHint(0);
     this.showCompletionMessage(data.taskTitle);
     
-    // 3秒后自动隐藏
-    setTimeout(() => {
-      this.hide();
-    }, 3000);
+    // 显示完成后的操作按钮
+    this.showCompletionButtons();
     
-    console.log("[FocusPage] Timer completed, hiding focus page");
+    console.log("[FocusPage] Timer completed, showing completion buttons");
   }
 
   /**
@@ -3599,6 +3972,18 @@ if (typeof window !== "undefined") {
   onTimerStopped(data) {
     this.hide();
     console.log("[FocusPage] Timer stopped, hiding focus page");
+  }
+
+  /**
+   * 处理计时器修改事件
+   * @param {Object} data - 事件数据
+   */
+  onTimerModified(data) {
+    this.updateCountdown(data.remainingSeconds, data.totalSeconds);
+    this.updateProgress(0); // 重置进度条
+    this.updateHint(data.remainingSeconds);
+    
+    console.log(`[FocusPage] Timer modified from ${data.oldDuration}s to ${data.newDuration}s`);
   }
 
   /**
@@ -3723,8 +4108,9 @@ if (typeof window !== "undefined") {
    * @param {boolean} show - 是否显示
    */
   showActionButtons(show) {
-    const buttons = this.container.querySelectorAll(".focus-action-btn");
-    buttons.forEach(btn => {
+    // 只选择常规操作按钮，排除完成后的操作按钮
+    const regularButtons = this.container.querySelectorAll("#pause-btn, #resume-btn, #modify-time-btn, #stop-btn");
+    regularButtons.forEach(btn => {
       btn.classList.toggle("hidden", !show);
     });
 
@@ -3740,22 +4126,26 @@ if (typeof window !== "undefined") {
   updateActionButtons(status) {
     const pauseBtn = this.container.querySelector("#pause-btn");
     const resumeBtn = this.container.querySelector("#resume-btn");
+    const modifyTimeBtn = this.container.querySelector("#modify-time-btn");
     const stopBtn = this.container.querySelector("#stop-btn");
 
     switch (status) {
       case "running":
         pauseBtn.classList.remove("hidden");
         resumeBtn.classList.add("hidden");
+        modifyTimeBtn.classList.remove("hidden");
         stopBtn.classList.remove("hidden");
         break;
       case "paused":
         pauseBtn.classList.add("hidden");
         resumeBtn.classList.remove("hidden");
+        modifyTimeBtn.classList.remove("hidden");
         stopBtn.classList.remove("hidden");
         break;
       default:
         pauseBtn.classList.add("hidden");
         resumeBtn.classList.add("hidden");
+        modifyTimeBtn.classList.add("hidden");
         stopBtn.classList.add("hidden");
     }
   }
@@ -3805,6 +4195,9 @@ if (typeof window !== "undefined") {
     this.updateProgress(0);
     this.showActionButtons(false);
     
+    // 确保完成按钮也被隐藏
+    this.hideCompletionButtons();
+    
     // 重置提示
     const hintElement = this.container.querySelector(".focus-hint");
     if (hintElement) {
@@ -3829,6 +4222,125 @@ if (typeof window !== "undefined") {
    */
   isPageVisible() {
     return this.isVisible;
+  }
+
+  /**
+   * 显示完成后的操作按钮
+   */
+  showCompletionButtons() {
+    const completeBtn = this.container.querySelector("#complete-btn");
+    const cancelBtn = this.container.querySelector("#cancel-complete-btn");
+    const extendBtn = this.container.querySelector("#extend-time-btn");
+    
+    // 隐藏其他按钮
+    this.showActionButtons(false);
+    
+    // 显示完成操作按钮
+    completeBtn.classList.remove("hidden");
+    cancelBtn.classList.remove("hidden");
+    extendBtn.classList.remove("hidden");
+  }
+
+  /**
+   * 隐藏完成后的操作按钮
+   */
+  hideCompletionButtons() {
+    const completeBtn = this.container.querySelector("#complete-btn");
+    const cancelBtn = this.container.querySelector("#cancel-complete-btn");
+    const extendBtn = this.container.querySelector("#extend-time-btn");
+    
+    completeBtn.classList.add("hidden");
+    cancelBtn.classList.add("hidden");
+    extendBtn.classList.add("hidden");
+  }
+
+  /**
+   * 处理任务完成
+   */
+  async handleTaskComplete() {
+    if (this.taskManager && this.timerManager.taskId) {
+      try {
+        const taskId = this.timerManager.taskId;
+        // 标记任务为完成
+        await this.taskManager.toggleTaskCompletion(taskId);
+        // 增加番茄钟计数
+        await this.taskManager.incrementPomodoroCount(taskId);
+        console.log(`[FocusPage] Task marked as completed`);
+        
+        // 显示成功提示
+        this.updateStatus("任务已标记完成 ✅", "completed");
+        
+        // 1秒后隐藏页面
+        setTimeout(() => {
+          this.hide();
+        }, 1000);
+      } catch (error) {
+        console.error("[FocusPage] Failed to complete task:", error);
+      }
+    }
+  }
+
+  /**
+   * 处理增加时间
+   */
+  handleExtendTime() {
+    const modal = this.container.querySelector("#extend-time-modal");
+    const input = this.container.querySelector("#extend-time-input");
+    input.value = 15; // 默认15分钟
+    modal.classList.remove("hidden");
+    
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 100);
+  }
+
+  /**
+   * 隐藏增加时间模态框
+   */
+  hideExtendTimeModal() {
+    const modal = this.container.querySelector("#extend-time-modal");
+    modal.classList.add("hidden");
+  }
+
+  /**
+   * 确认增加时间
+   */
+  async confirmExtendTime() {
+    const input = this.container.querySelector("#extend-time-input");
+    const minutes = parseInt(input.value);
+    
+    if (isNaN(minutes) || minutes < 1 || minutes > 60) {
+      alert("请输入有效的时间（1-60分钟）");
+      input.focus();
+      return;
+    }
+    
+    const seconds = minutes * 60;
+    
+    // 使用 TimerManager 重新启动计时器
+    if (this.timerManager) {
+      const taskId = this.timerManager.taskId;
+      const taskTitle = this.timerManager.taskTitle;
+      
+      // 重新启动计时器
+      await this.timerManager.startTimer(taskId, taskTitle, seconds);
+      
+      // 隐藏modal和完成按钮
+      this.hideExtendTimeModal();
+      this.hideCompletionButtons();
+      
+      console.log(`[FocusPage] Extended timer by ${minutes} minutes`);
+    }
+  }
+
+  /**
+   * 检查增加时间模态框是否可见
+   * @returns {boolean} 是否可见
+   */
+  isExtendTimeModalVisible() {
+    const modal = this.container.querySelector("#extend-time-modal");
+    return modal && !modal.classList.contains("hidden");
   }
 
   /**
@@ -5110,6 +5622,42 @@ background: #70A85C;
 color: #ffffff;
 box-shadow: 0 4px 12px rgba(112, 168, 92, 0.3);
 }
+.modify-time-btn {
+border-color: #E67E22;
+color: #E67E22;
+}
+.modify-time-btn:hover {
+background: #E67E22;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
+}
+.complete-btn {
+border-color: #70A85C;
+color: #70A85C;
+}
+.complete-btn:hover {
+background: #70A85C;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(112, 168, 92, 0.3);
+}
+.cancel-complete-btn {
+border-color: #999999;
+color: #999999;
+}
+.cancel-complete-btn:hover {
+background: #999999;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(153, 153, 153, 0.3);
+}
+.extend-time-btn {
+border-color: #3498db;
+color: #3498db;
+}
+.extend-time-btn:hover {
+background: #3498db;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
 .focus-info {
 margin-top: 20px;
 }
@@ -5136,6 +5684,146 @@ margin-bottom: 12px;
 font-size: 18px;
 color: #666666;
 opacity: 0.8;
+}
+.time-modify-modal {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+z-index: 10003;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.time-modify-modal.hidden {
+display: none;
+}
+.modal-overlay {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(0, 0, 0, 0.5);
+backdrop-filter: blur(4px);
+}
+.modal-content {
+position: relative;
+background: #ffffff;
+border-radius: 16px;
+padding: 0;
+width: 420px;
+max-width: 90vw;
+box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+animation: modalSlideIn 0.3s ease-out;
+}
+@keyframes modalSlideIn {
+from {
+opacity: 0;
+transform: translateY(-20px) scale(0.95);
+}
+to {
+opacity: 1;
+transform: translateY(0) scale(1);
+}
+}
+.modal-header {
+padding: 24px 24px 16px 24px;
+border-bottom: 1px solid #f0f0f0;
+}
+.modal-header h3 {
+margin: 0;
+font-size: 20px;
+font-weight: 600;
+color: #333333;
+}
+.modal-body {
+padding: 20px 24px;
+}
+.time-input-group {
+margin-bottom: 20px;
+}
+.time-input-group label {
+display: block;
+margin-bottom: 8px;
+font-size: 14px;
+font-weight: 500;
+color: #555555;
+}
+.time-input {
+width: 100%;
+padding: 12px 16px;
+border: 2px solid #e0e0e0;
+border-radius: 8px;
+font-size: 16px;
+transition: border-color 0.2s ease;
+box-sizing: border-box;
+}
+.time-input:focus {
+outline: none;
+border-color: #D95550;
+box-shadow: 0 0 0 3px rgba(217, 85, 80, 0.1);
+}
+.time-presets {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 8px;
+margin-top: 16px;
+}
+.preset-btn {
+padding: 10px 16px;
+border: 2px solid #e0e0e0;
+background: #ffffff;
+color: #666666;
+border-radius: 6px;
+font-size: 14px;
+cursor: pointer;
+transition: all 0.2s ease;
+}
+.preset-btn:hover {
+border-color: #D95550;
+color: #D95550;
+}
+.preset-btn.selected {
+border-color: #D95550;
+background: #D95550;
+color: #ffffff;
+}
+.modal-actions {
+padding: 16px 24px 24px 24px;
+display: flex;
+gap: 12px;
+justify-content: flex-end;
+}
+.modal-btn {
+padding: 10px 24px;
+border: none;
+border-radius: 6px;
+font-size: 14px;
+font-weight: 500;
+cursor: pointer;
+transition: all 0.2s ease;
+min-width: 80px;
+}
+.cancel-btn {
+background: #f5f5f5;
+color: #666666;
+}
+.cancel-btn:hover {
+background: #e8e8e8;
+}
+.confirm-btn {
+background: #D95550;
+color: #ffffff;
+}
+.confirm-btn:hover {
+background: #c44540;
+box-shadow: 0 2px 8px rgba(217, 85, 80, 0.3);
+}
+.confirm-btn:disabled {
+background: #cccccc;
+cursor: not-allowed;
 }
 @media (max-width: 768px) {
 .focus-page-content {
@@ -5209,6 +5897,30 @@ margin-bottom: 8px;
 .completion-task {
 font-size: 16px;
 }
+.modal-content {
+width: 360px;
+margin: 16px;
+}
+.modal-header {
+padding: 20px 20px 12px 20px;
+}
+.modal-header h3 {
+font-size: 18px;
+}
+.modal-body {
+padding: 16px 20px;
+}
+.time-presets {
+grid-template-columns: 1fr 1fr;
+gap: 6px;
+}
+.preset-btn {
+padding: 8px 12px;
+font-size: 13px;
+}
+.modal-actions {
+padding: 12px 20px 20px 20px;
+}
 }
 @media (max-width: 360px) {
 .countdown-display {
@@ -5237,6 +5949,31 @@ font-size: 18px;
 }
 .focus-hint {
 font-size: 18px;
+}
+.modal-content {
+width: calc(100vw - 32px);
+margin: 16px;
+}
+.modal-header {
+padding: 16px 16px 8px 16px;
+}
+.modal-body {
+padding: 12px 16px;
+}
+.time-presets {
+grid-template-columns: 1fr;
+gap: 8px;
+}
+.modal-actions {
+padding: 8px 16px 16px 16px;
+flex-direction: column;
+}
+.modal-btn {
+width: 100%;
+margin-bottom: 8px;
+}
+.modal-btn:last-child {
+margin-bottom: 0;
 }
 }
 @media (prefers-contrast: high) {
