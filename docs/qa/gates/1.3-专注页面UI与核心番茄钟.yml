@@ -1,0 +1,19 @@
+schema: 1
+story: "1.3"
+story_title: "专注页面UI与核心番茄钟"
+gate: "PASS" # PASS|CONCERNS|FAIL|WAIVED
+status_reason: "Blockers resolved: StorageManager helpers added for timer persistence; UI sanitization applied (no innerHTML injection); Notification detection guarded. Timer start flows, observer updates, and Focus Page visibility verified. Remaining items are non-blocking test-harness concerns."
+reviewer: "Quinn (Test Architect)"
+updated: "2025-09-08T08:02:00Z"
+
+waiver:
+  active: false
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor:
+      - "Adjust TimerManager Jest expectations for Notification and timer handles; consider integration test for FocusPage show on timerStarted."

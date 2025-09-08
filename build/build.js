@@ -100,19 +100,25 @@ function build() {
         const storageManager = readFile(path.join(SRC_DIR, 'core', 'storage-manager.js'));
         const whitelistManager = readFile(path.join(SRC_DIR, 'core', 'whitelist-manager.js'));
         const taskManager = readFile(path.join(SRC_DIR, 'core', 'task-manager.js'));
+        const timerManager = readFile(path.join(SRC_DIR, 'core', 'timer-manager.js'));
         const settingsPanel = readFile(path.join(SRC_DIR, 'components', 'settings-panel.js'));
         const todoList = readFile(path.join(SRC_DIR, 'components', 'todo-list.js'));
+        const focusPage = readFile(path.join(SRC_DIR, 'components', 'focus-page.js'));
         const mainCSS = readFile(path.join(SRC_DIR, 'styles', 'main.css'));
+        const focusPageCSS = readFile(path.join(SRC_DIR, 'styles', 'focus-page.css'));
         
         // Extract module content
         const storageManagerContent = extractModuleContent(storageManager, 'StorageManager');
         const whitelistManagerContent = extractModuleContent(whitelistManager, 'WhitelistManager');
         const taskManagerContent = extractModuleContent(taskManager, 'TaskManager');
+        const timerManagerContent = extractModuleContent(timerManager, 'TimerManager');
         const settingsPanelContent = extractModuleContent(settingsPanel, 'SettingsPanel');
         const todoListContent = extractModuleContent(todoList, 'TodoList');
+        const focusPageContent = extractModuleContent(focusPage, 'FocusPage');
         
         // Process CSS - escape backticks and minimize
-        const processedCSS = mainCSS
+        const combinedCSS = mainCSS + '\n\n' + focusPageCSS;
+        const processedCSS = combinedCSS
             .replace(/`/g, '\\`')
             .replace(/\n\s*\/\*[\s\S]*?\*\//g, '') // Remove comments
             .replace(/\n\s+/g, '\n') // Remove extra indentation
@@ -151,6 +157,11 @@ function build() {
     ${taskManagerContent}
     
     /**
+     * TimerManager - 计时器管理器
+     */
+    ${timerManagerContent}
+    
+    /**
      * SettingsPanel - 设置面板UI组件
      */
     ${settingsPanelContent}
@@ -159,6 +170,11 @@ function build() {
      * TodoList - ToDo列表UI组件
      */
     ${todoListContent}
+    
+    /**
+     * FocusPage - 专注页面UI组件
+     */
+    ${focusPageContent}
     
     // ========== 应用程序主类 ==========
     
@@ -230,6 +246,14 @@ function build() {
             // 初始化任务管理器
             this.taskManager = TaskManager.getInstance();
             await this.taskManager.initialize(this.storageManager);
+            
+            // 初始化计时器管理器
+            this.timerManager = TimerManager.getInstance();
+            await this.timerManager.initialize(this.storageManager);
+            
+            // 初始化专注页面
+            this.focusPage = new FocusPage();
+            this.focusPage.initialize(this.timerManager);
             
             console.log('[TomatoMonkey] Core modules initialized');
         }

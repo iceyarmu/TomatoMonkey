@@ -236,6 +236,57 @@ class StorageManager {
   }
 
   /**
+   * 通用方法：保存数据到存储
+   * @param {string} key - 存储键
+   * @param {any} value - 要保存的值
+   * @returns {boolean} 保存是否成功
+   */
+  setData(key, value) {
+    try {
+      const serializedData = JSON.stringify(value);
+      GM_setValue(key, serializedData);
+      return true;
+    } catch (error) {
+      console.error(`[StorageManager] Failed to set data for key ${key}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * 通用方法：从存储获取数据
+   * @param {string} key - 存储键
+   * @param {any} defaultValue - 默认值
+   * @returns {any} 存储的值或默认值
+   */
+  getData(key, defaultValue = null) {
+    try {
+      const serializedData = GM_getValue(key, null);
+      if (serializedData === null || serializedData === undefined) {
+        return defaultValue;
+      }
+      return JSON.parse(serializedData);
+    } catch (error) {
+      console.error(`[StorageManager] Failed to get data for key ${key}:`, error);
+      return defaultValue;
+    }
+  }
+
+  /**
+   * 通用方法：从存储删除数据
+   * @param {string} key - 存储键
+   * @returns {boolean} 删除是否成功
+   */
+  removeData(key) {
+    try {
+      GM_setValue(key, undefined);
+      return true;
+    } catch (error) {
+      console.error(`[StorageManager] Failed to remove data for key ${key}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * 获取存储统计信息
    * @returns {Object} 存储统计信息
    */
@@ -1253,6 +1304,529 @@ if (typeof window !== "undefined") {
   window.TaskManager = TaskManager;
   window.taskManager = taskManager;
 }
+    
+    /**
+     * TimerManager - 计时器管理器
+     */
+    class TimerManager {
+  constructor() {
+    // 单例模式
+    if (TimerManager.instance) {
+      return TimerManager.instance;
+    }
+    TimerManager.instance = this;
+
+    // 计时器状态
+    this.status = "idle"; // idle, running, paused, completed
+    this.taskId = null;
+    this.taskTitle = null;
+    this.startTime = null;
+    this.remainingSeconds = 0;
+    this.totalSeconds = 1500; // 默认25分钟
+    this.intervalId = null;
+
+    // 观察者列表
+    this.observers = [];
+
+    // 存储管理器引用
+    this.storageManager = null;
+
+    // 通知权限状态
+    this.notificationPermission = null;
+
+    this.initialized = false;
+
+    console.log("[TimerManager] Created");
+  }
+
+  /**
+   * 初始化计时器管理器
+   * @param {StorageManager} storageManager - 存储管理器实例
+   */
+  async initialize(storageManager) {
+    if (this.initialized) {
+      return;
+    }
+
+    this.storageManager = storageManager;
+    
+    // 检查通知权限
+    await this.checkNotificationPermission();
+    
+    // 恢复计时器状态
+    await this.restoreTimerState();
+
+    this.initialized = true;
+    console.log("[TimerManager] Initialized successfully");
+  }
+
+  /**
+   * 检查并请求通知权限
+   */
+  async checkNotificationPermission() {
+    // 更健壮的 Notification API 检测
+    const NotificationAPI = (typeof window !== 'undefined' && window.Notification) 
+      ? window.Notification 
+      : (typeof Notification !== 'undefined' ? Notification : null);
+    
+    if (!NotificationAPI) {
+      this.notificationPermission = "unsupported";
+      console.warn("[TimerManager] Browser does not support notifications");
+      return;
+    }
+
+    this.notificationPermission = NotificationAPI.permission;
+    
+    if (this.notificationPermission === "default") {
+      try {
+        const permission = await NotificationAPI.requestPermission();
+        this.notificationPermission = permission;
+        console.log(`[TimerManager] Notification permission: ${permission}`);
+      } catch (error) {
+        console.error("[TimerManager] Failed to request notification permission:", error);
+        this.notificationPermission = "denied";
+      }
+    }
+  }
+
+  /**
+   * 启动计时器
+   * @param {string} taskId - 任务ID
+   * @param {string} taskTitle - 任务标题
+   * @param {number} duration - 计时时长（秒），默认25分钟
+   */
+  startTimer(taskId, taskTitle, duration = 1500) {
+    if (this.status === "running") {
+      console.warn("[TimerManager] Timer is already running");
+      return false;
+    }
+
+    this.taskId = taskId;
+    this.taskTitle = taskTitle;
+    this.totalSeconds = duration;
+    this.remainingSeconds = duration;
+    this.startTime = Date.now();
+    this.status = "running";
+
+    this.startCountdown();
+    this.saveTimerState();
+    this.notifyObservers("timerStarted", {
+      taskId: this.taskId,
+      taskTitle: this.taskTitle,
+      totalSeconds: this.totalSeconds,
+      remainingSeconds: this.remainingSeconds,
+    });
+
+    console.log(`[TimerManager] Timer started for task: ${taskTitle} (${duration}s)`);
+    return true;
+  }
+
+  /**
+   * 暂停计时器
+   */
+  pauseTimer() {
+    if (this.status !== "running") {
+      console.warn("[TimerManager] Timer is not running");
+      return false;
+    }
+
+    this.status = "paused";
+    this.clearCountdown();
+    this.saveTimerState();
+    this.notifyObservers("timerPaused", {
+      remainingSeconds: this.remainingSeconds,
+    });
+
+    console.log("[TimerManager] Timer paused");
+    return true;
+  }
+
+  /**
+   * 恢复计时器
+   */
+  resumeTimer() {
+    if (this.status !== "paused") {
+      console.warn("[TimerManager] Timer is not paused");
+      return false;
+    }
+
+    this.status = "running";
+    this.startTime = Date.now() - (this.totalSeconds - this.remainingSeconds) * 1000;
+    this.startCountdown();
+    this.saveTimerState();
+    this.notifyObservers("timerResumed", {
+      remainingSeconds: this.remainingSeconds,
+    });
+
+    console.log("[TimerManager] Timer resumed");
+    return true;
+  }
+
+  /**
+   * 停止计时器
+   */
+  stopTimer() {
+    if (this.status === "idle") {
+      console.warn("[TimerManager] Timer is already idle");
+      return false;
+    }
+
+    this.clearCountdown();
+    this.resetTimer();
+    this.clearTimerState();
+    this.notifyObservers("timerStopped", {});
+
+    console.log("[TimerManager] Timer stopped");
+    return true;
+  }
+
+  /**
+   * 开始倒计时
+   */
+  startCountdown() {
+    this.clearCountdown(); // 清除可能存在的计时器
+    
+    this.intervalId = setInterval(() => {
+      this.updateCountdown();
+    }, 1000);
+  }
+
+  /**
+   * 更新倒计时
+   */
+  updateCountdown() {
+    if (this.status !== "running") {
+      return;
+    }
+
+    const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+    this.remainingSeconds = Math.max(0, this.totalSeconds - elapsed);
+
+    // 通知观察者
+    this.notifyObservers("timerTick", {
+      remainingSeconds: this.remainingSeconds,
+      totalSeconds: this.totalSeconds,
+      progress: (this.totalSeconds - this.remainingSeconds) / this.totalSeconds,
+    });
+
+    // 保存状态
+    this.saveTimerState();
+
+    // 检查是否完成
+    if (this.remainingSeconds <= 0) {
+      this.completeTimer();
+    }
+  }
+
+  /**
+   * 完成计时器
+   */
+  completeTimer() {
+    this.clearCountdown();
+    this.status = "completed";
+    
+    // 发送桌面通知
+    this.sendNotification();
+
+    // 通知观察者
+    this.notifyObservers("timerCompleted", {
+      taskId: this.taskId,
+      taskTitle: this.taskTitle,
+    });
+
+    // 重置计时器状态
+    setTimeout(() => {
+      this.resetTimer();
+      this.clearTimerState();
+    }, 1000); // 给UI足够时间处理完成事件
+
+    console.log(`[TimerManager] Timer completed for task: ${this.taskTitle}`);
+  }
+
+  /**
+   * 发送桌面通知
+   */
+  sendNotification() {
+    const title = "专注时间结束 🍅";
+    const message = this.taskTitle 
+      ? `任务「${this.taskTitle}」的专注时间已完成`
+      : "专注时间已完成";
+
+    if (this.notificationPermission === "granted") {
+      try {
+        // 更健壮的 Notification API 检测
+        const NotificationAPI = (typeof window !== 'undefined' && window.Notification) 
+          ? window.Notification 
+          : (typeof Notification !== 'undefined' ? Notification : null);
+        
+        if (!NotificationAPI) {
+          this.showFallbackNotification(title, message);
+          return;
+        }
+
+        const notification = new NotificationAPI(title, {
+          body: message,
+          icon: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJMMTMuMDkgOC4yNkwyMCA5TDEzLjA5IDE1Ljc0TDEyIDIyTDEwLjkxIDE1Ljc0TDQgOUwxMC45MSA4LjI2TDEyIDJaIiBmaWxsPSIjRDk1NTUwIi8+Cjwvc3ZnPgo=",
+          requireInteraction: false,
+          silent: false,
+        });
+
+        // 自动关闭通知
+        setTimeout(() => {
+          notification.close();
+        }, 5000);
+
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+
+      } catch (error) {
+        console.error("[TimerManager] Failed to send notification:", error);
+        this.showFallbackNotification(title, message);
+      }
+    } else {
+      console.warn(`[TimerManager] Notification permission: ${this.notificationPermission}`);
+      this.showFallbackNotification(title, message);
+    }
+  }
+
+  /**
+   * 显示降级通知（页面内提示）
+   * @param {string} title - 通知标题
+   * @param {string} message - 通知消息
+   */
+  showFallbackNotification(title, message) {
+    // 创建页面内通知
+    const notification = document.createElement("div");
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      max-width: 300px;
+      padding: 16px;
+      background: #D95550;
+      color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
+      z-index: 10002;
+      font-family: Inter, sans-serif;
+      font-size: 14px;
+      line-height: 1.4;
+    `;
+    
+    // 使用DOM操作创建内容（防止XSS）
+    const titleDiv = document.createElement("div");
+    titleDiv.style.cssText = "font-weight: 600; margin-bottom: 4px;";
+    titleDiv.textContent = title;
+    notification.appendChild(titleDiv);
+    
+    const messageDiv = document.createElement("div");
+    messageDiv.textContent = message;
+    notification.appendChild(messageDiv);
+
+    document.body.appendChild(notification);
+
+    // 自动移除通知
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 5000);
+  }
+
+  /**
+   * 清除倒计时间隔
+   */
+  clearCountdown() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+
+  /**
+   * 重置计时器状态
+   */
+  resetTimer() {
+    this.status = "idle";
+    this.taskId = null;
+    this.taskTitle = null;
+    this.startTime = null;
+    this.remainingSeconds = 0;
+    this.totalSeconds = 1500;
+  }
+
+  /**
+   * 保存计时器状态
+   */
+  saveTimerState() {
+    if (!this.storageManager) return;
+
+    const state = {
+      status: this.status,
+      taskId: this.taskId,
+      taskTitle: this.taskTitle,
+      startTime: this.startTime,
+      remainingSeconds: this.remainingSeconds,
+      totalSeconds: this.totalSeconds,
+      timestamp: Date.now(),
+    };
+
+    this.storageManager.setData("timerState", state);
+  }
+
+  /**
+   * 恢复计时器状态
+   */
+  async restoreTimerState() {
+    if (!this.storageManager) return;
+
+    try {
+      const state = this.storageManager.getData("timerState");
+      if (!state || state.status === "idle") {
+        return;
+      }
+
+      const now = Date.now();
+      const timeDiff = Math.floor((now - state.timestamp) / 1000);
+
+      // 如果状态是运行中，需要计算实际剩余时间
+      if (state.status === "running") {
+        const elapsed = Math.floor((now - state.startTime) / 1000);
+        const remaining = Math.max(0, state.totalSeconds - elapsed);
+
+        if (remaining > 0) {
+          this.taskId = state.taskId;
+          this.taskTitle = state.taskTitle;
+          this.startTime = state.startTime;
+          this.remainingSeconds = remaining;
+          this.totalSeconds = state.totalSeconds;
+          this.status = "running";
+
+          this.startCountdown();
+          console.log("[TimerManager] Timer state restored and resumed");
+        } else {
+          // 计时器应该已经完成了
+          this.completeTimer();
+          console.log("[TimerManager] Timer completed while away");
+        }
+      } else if (state.status === "paused") {
+        this.taskId = state.taskId;
+        this.taskTitle = state.taskTitle;
+        this.remainingSeconds = state.remainingSeconds;
+        this.totalSeconds = state.totalSeconds;
+        this.status = "paused";
+        console.log("[TimerManager] Timer state restored (paused)");
+      }
+
+    } catch (error) {
+      console.error("[TimerManager] Failed to restore timer state:", error);
+    }
+  }
+
+  /**
+   * 清除保存的计时器状态
+   */
+  clearTimerState() {
+    if (!this.storageManager) return;
+    this.storageManager.removeData("timerState");
+  }
+
+  /**
+   * 添加观察者
+   * @param {Function} observer - 观察者回调函数
+   */
+  addObserver(observer) {
+    if (typeof observer === "function" && !this.observers.includes(observer)) {
+      this.observers.push(observer);
+    }
+  }
+
+  /**
+   * 移除观察者
+   * @param {Function} observer - 观察者回调函数
+   */
+  removeObserver(observer) {
+    const index = this.observers.indexOf(observer);
+    if (index > -1) {
+      this.observers.splice(index, 1);
+    }
+  }
+
+  /**
+   * 通知所有观察者
+   * @param {string} event - 事件类型
+   * @param {Object} data - 事件数据
+   */
+  notifyObservers(event, data) {
+    this.observers.forEach((observer) => {
+      try {
+        observer(event, data);
+      } catch (error) {
+        console.error("[TimerManager] Observer error:", error);
+      }
+    });
+  }
+
+  /**
+   * 获取计时器当前状态
+   * @returns {Object} 计时器状态
+   */
+  getTimerState() {
+    return {
+      status: this.status,
+      taskId: this.taskId,
+      taskTitle: this.taskTitle,
+      remainingSeconds: this.remainingSeconds,
+      totalSeconds: this.totalSeconds,
+      progress: this.totalSeconds > 0 ? (this.totalSeconds - this.remainingSeconds) / this.totalSeconds : 0,
+    };
+  }
+
+  /**
+   * 格式化时间显示
+   * @param {number} seconds - 秒数
+   * @returns {string} 格式化的时间 (MM:SS)
+   */
+  formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * 获取单例实例
+   * @returns {TimerManager} 计时器管理器实例
+   */
+  static getInstance() {
+    if (!TimerManager.instance) {
+      TimerManager.instance = new TimerManager();
+    }
+    return TimerManager.instance;
+  }
+
+  /**
+   * 销毁计时器管理器
+   */
+  destroy() {
+    this.clearCountdown();
+    this.clearTimerState();
+    this.observers = [];
+    console.log("[TimerManager] Destroyed");
+  }
+}
+
+// 创建单例实例
+const timerManager = new TimerManager();
+
+// 全局对象暴露
+if (typeof window !== "undefined") {
+  window.TimerManager = TimerManager;
+  window.timerManager = timerManager;
+}
+
+// 模块导出 (支持 CommonJS 和 ES6)
     
     /**
      * SettingsPanel - 设置面板UI组件
@@ -2425,6 +2999,47 @@ class TodoList {
   }
 
   /**
+   * 开始专注会话
+   * @param {string} taskId - 任务ID
+   * @param {string} taskTitle - 任务标题
+   */
+  startFocusSession(taskId, taskTitle) {
+    try {
+      // 获取TimerManager实例
+      const timerManager = window.TimerManager ? window.TimerManager.getInstance() : null;
+      
+      if (!timerManager) {
+        this.showError("计时器模块未就绪，请刷新页面重试");
+        console.error("[TodoList] TimerManager not available");
+        return;
+      }
+
+      // 检查是否已有计时器在运行
+      const timerState = timerManager.getTimerState();
+      if (timerState.status === "running") {
+        const confirmed = confirm("已有计时器在运行中，是否要停止当前计时器并开始新的专注会话？");
+        if (!confirmed) return;
+        
+        timerManager.stopTimer();
+      }
+
+      // 启动计时器 (默认25分钟)
+      const started = timerManager.startTimer(taskId, taskTitle, 1500);
+      
+      if (started) {
+        console.log(`[TodoList] Started focus session for task: ${taskTitle}`);
+      } else {
+        this.showError("无法启动专注会话，请重试");
+        console.error("[TodoList] Failed to start timer");
+      }
+
+    } catch (error) {
+      console.error("[TodoList] Failed to start focus session:", error);
+      this.showError("启动专注会话失败，请重试");
+    }
+  }
+
+  /**
    * 清除所有已完成任务
    */
   async clearCompletedTasks() {
@@ -2492,6 +3107,16 @@ class TodoList {
                 </div>
                 
                 <div class="task-actions">
+                    ${!task.isCompleted ? `
+                        <button 
+                            type="button" 
+                            class="start-focus-button" 
+                            title="开始专注"
+                            aria-label="开始专注: ${task.title}"
+                        >
+                            🍅
+                        </button>
+                    ` : ""}
                     <button 
                         type="button" 
                         class="delete-task-button" 
@@ -2518,6 +3143,12 @@ class TodoList {
     // 复选框点击
     if (e.target.classList.contains("task-checkbox")) {
       this.toggleTask(taskId);
+    }
+
+    // 开始专注按钮点击
+    else if (e.target.classList.contains("start-focus-button")) {
+      const taskTitle = taskItem.querySelector(".task-title").textContent;
+      this.startFocusSession(taskId, taskTitle);
     }
 
     // 删除按钮点击
@@ -2698,6 +3329,530 @@ class TodoList {
 // 如果在浏览器环境中，将其添加到全局对象
 if (typeof window !== "undefined") {
   window.TodoList = TodoList;
+}
+    
+    /**
+     * FocusPage - 专注页面UI组件
+     */
+    class FocusPage {
+  constructor() {
+    this.container = null;
+    this.isInitialized = false;
+    this.isVisible = false;
+    
+    // UI元素引用
+    this.taskTitleElement = null;
+    this.countdownElement = null;
+    this.statusElement = null;
+    this.progressElement = null;
+    
+    // 计时器管理器引用
+    this.timerManager = null;
+    
+    // 观察者回调绑定
+    this.boundObserverCallback = this.handleTimerEvent.bind(this);
+    
+    console.log("[FocusPage] Created");
+  }
+
+  /**
+   * 初始化专注页面
+   * @param {TimerManager} timerManager - 计时器管理器实例
+   */
+  initialize(timerManager) {
+    if (this.isInitialized) {
+      return;
+    }
+
+    this.timerManager = timerManager;
+    this.createPageStructure();
+    this.bindTimerManager();
+
+    this.isInitialized = true;
+    console.log("[FocusPage] Initialized successfully");
+  }
+
+  /**
+   * 创建专注页面的DOM结构
+   */
+  createPageStructure() {
+    // 创建专注页面容器
+    this.container = document.createElement("div");
+    this.container.id = "tomato-monkey-focus-page";
+    this.container.className = "focus-page-container hidden";
+    
+    this.container.innerHTML = `
+      <div class="focus-page-overlay"></div>
+      <div class="focus-page-content">
+        <div class="focus-header">
+          <div class="focus-task-title" id="focus-task-title">
+            准备开始专注...
+          </div>
+          <div class="focus-status" id="focus-status">
+            就绪
+          </div>
+        </div>
+        
+        <div class="focus-timer">
+          <div class="countdown-display" id="countdown-display">
+            25:00
+          </div>
+          <div class="countdown-progress" id="countdown-progress">
+            <div class="progress-bar" id="progress-bar"></div>
+          </div>
+        </div>
+        
+        <div class="focus-actions">
+          <button type="button" class="focus-action-btn pause-btn hidden" id="pause-btn">
+            暂停
+          </button>
+          <button type="button" class="focus-action-btn resume-btn hidden" id="resume-btn">
+            继续
+          </button>
+          <button type="button" class="focus-action-btn stop-btn hidden" id="stop-btn">
+            结束专注
+          </button>
+        </div>
+        
+        <div class="focus-info">
+          <div class="focus-hint">
+            保持专注，距离完成还有一段时间
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 添加到页面
+    document.body.appendChild(this.container);
+
+    // 获取UI元素引用
+    this.taskTitleElement = this.container.querySelector("#focus-task-title");
+    this.countdownElement = this.container.querySelector("#countdown-display");
+    this.statusElement = this.container.querySelector("#focus-status");
+    this.progressElement = this.container.querySelector("#progress-bar");
+    
+    // 绑定事件
+    this.setupEventListeners();
+  }
+
+  /**
+   * 设置事件监听器
+   */
+  setupEventListeners() {
+    // 暂停按钮
+    const pauseBtn = this.container.querySelector("#pause-btn");
+    pauseBtn.addEventListener("click", () => {
+      if (this.timerManager) {
+        this.timerManager.pauseTimer();
+      }
+    });
+
+    // 继续按钮
+    const resumeBtn = this.container.querySelector("#resume-btn");
+    resumeBtn.addEventListener("click", () => {
+      if (this.timerManager) {
+        this.timerManager.resumeTimer();
+      }
+    });
+
+    // 停止按钮
+    const stopBtn = this.container.querySelector("#stop-btn");
+    stopBtn.addEventListener("click", () => {
+      this.showStopConfirmation();
+    });
+
+    // 点击遮罩层不做任何操作（避免意外关闭）
+    this.container.querySelector(".focus-page-overlay").addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+
+    // ESC键退出确认
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.isVisible) {
+        this.showStopConfirmation();
+      }
+    });
+  }
+
+  /**
+   * 显示停止确认对话框
+   */
+  showStopConfirmation() {
+    const confirmed = confirm("确定要结束当前的专注时间吗？\n\n这将停止计时器并返回任务列表。");
+    if (confirmed && this.timerManager) {
+      this.timerManager.stopTimer();
+    }
+  }
+
+  /**
+   * 绑定计时器管理器事件
+   */
+  bindTimerManager() {
+    if (!this.timerManager) return;
+
+    this.timerManager.addObserver(this.boundObserverCallback);
+  }
+
+  /**
+   * 解绑计时器管理器事件
+   */
+  unbindTimerManager() {
+    if (!this.timerManager) return;
+
+    this.timerManager.removeObserver(this.boundObserverCallback);
+  }
+
+  /**
+   * 处理计时器事件
+   * @param {string} event - 事件类型
+   * @param {Object} data - 事件数据
+   */
+  handleTimerEvent(event, data) {
+    switch (event) {
+      case "timerStarted":
+        this.onTimerStarted(data);
+        break;
+      case "timerTick":
+        this.onTimerTick(data);
+        break;
+      case "timerPaused":
+        this.onTimerPaused(data);
+        break;
+      case "timerResumed":
+        this.onTimerResumed(data);
+        break;
+      case "timerCompleted":
+        this.onTimerCompleted(data);
+        break;
+      case "timerStopped":
+        this.onTimerStopped(data);
+        break;
+    }
+  }
+
+  /**
+   * 处理计时器开始事件
+   * @param {Object} data - 事件数据
+   */
+  onTimerStarted(data) {
+    this.updateTaskInfo(data.taskTitle);
+    this.updateCountdown(data.remainingSeconds, data.totalSeconds);
+    this.updateStatus("专注中", "running");
+    this.updateProgress(0);
+    this.show();
+    this.showActionButtons(true);
+    
+    console.log("[FocusPage] Timer started, showing focus page");
+  }
+
+  /**
+   * 处理计时器更新事件
+   * @param {Object} data - 事件数据
+   */
+  onTimerTick(data) {
+    this.updateCountdown(data.remainingSeconds, data.totalSeconds);
+    this.updateProgress(data.progress);
+    this.updateHint(data.remainingSeconds);
+  }
+
+  /**
+   * 处理计时器暂停事件
+   * @param {Object} data - 事件数据
+   */
+  onTimerPaused(data) {
+    this.updateStatus("已暂停", "paused");
+    this.updateActionButtons("paused");
+  }
+
+  /**
+   * 处理计时器恢复事件
+   * @param {Object} data - 事件数据
+   */
+  onTimerResumed(data) {
+    this.updateStatus("专注中", "running");
+    this.updateActionButtons("running");
+  }
+
+  /**
+   * 处理计时器完成事件
+   * @param {Object} data - 事件数据
+   */
+  onTimerCompleted(data) {
+    this.updateStatus("已完成 🎉", "completed");
+    this.updateHint(0);
+    this.showCompletionMessage(data.taskTitle);
+    
+    // 3秒后自动隐藏
+    setTimeout(() => {
+      this.hide();
+    }, 3000);
+    
+    console.log("[FocusPage] Timer completed, hiding focus page");
+  }
+
+  /**
+   * 处理计时器停止事件
+   * @param {Object} data - 事件数据
+   */
+  onTimerStopped(data) {
+    this.hide();
+    console.log("[FocusPage] Timer stopped, hiding focus page");
+  }
+
+  /**
+   * 更新任务信息
+   * @param {string} taskTitle - 任务标题
+   */
+  updateTaskInfo(taskTitle) {
+    if (this.taskTitleElement) {
+      this.taskTitleElement.textContent = taskTitle || "未知任务";
+    }
+  }
+
+  /**
+   * 更新倒计时显示
+   * @param {number} remainingSeconds - 剩余秒数
+   * @param {number} totalSeconds - 总秒数
+   */
+  updateCountdown(remainingSeconds, totalSeconds = null) {
+    if (!this.countdownElement) return;
+
+    const timeStr = this.formatTime(remainingSeconds);
+    this.countdownElement.textContent = timeStr;
+
+    // 添加时间警告样式
+    if (remainingSeconds <= 300) { // 最后5分钟
+      this.countdownElement.classList.add("warning");
+    } else {
+      this.countdownElement.classList.remove("warning");
+    }
+
+    if (remainingSeconds <= 60) { // 最后1分钟
+      this.countdownElement.classList.add("urgent");
+    } else {
+      this.countdownElement.classList.remove("urgent");
+    }
+  }
+
+  /**
+   * 更新状态显示
+   * @param {string} statusText - 状态文本
+   * @param {string} statusClass - 状态样式类
+   */
+  updateStatus(statusText, statusClass) {
+    if (!this.statusElement) return;
+
+    this.statusElement.textContent = statusText;
+    this.statusElement.className = `focus-status ${statusClass}`;
+  }
+
+  /**
+   * 更新进度条
+   * @param {number} progress - 进度（0-1）
+   */
+  updateProgress(progress) {
+    if (!this.progressElement) return;
+
+    const percentage = Math.min(100, Math.max(0, progress * 100));
+    this.progressElement.style.width = `${percentage}%`;
+  }
+
+  /**
+   * 更新提示信息
+   * @param {number} remainingSeconds - 剩余秒数
+   */
+  updateHint(remainingSeconds) {
+    const hintElement = this.container.querySelector(".focus-hint");
+    if (!hintElement) return;
+
+    let hintText = "保持专注，距离完成还有一段时间";
+
+    if (remainingSeconds <= 0) {
+      hintText = "恭喜！本次专注时间已完成 🎉";
+    } else if (remainingSeconds <= 60) {
+      hintText = "最后冲刺！还有不到1分钟";
+    } else if (remainingSeconds <= 300) {
+      hintText = "进入最后阶段，坚持住！";
+    } else if (remainingSeconds <= 900) {
+      hintText = "已经过半，继续保持专注";
+    }
+
+    hintElement.textContent = hintText;
+  }
+
+  /**
+   * 显示完成消息
+   * @param {string} taskTitle - 任务标题
+   */
+  showCompletionMessage(taskTitle) {
+    const messageElement = this.container.querySelector(".focus-hint");
+    if (messageElement) {
+      // 清空现有内容
+      messageElement.innerHTML = '';
+      
+      // 创建完成消息容器
+      const completionDiv = document.createElement('div');
+      completionDiv.className = 'completion-message';
+      
+      // 创建图标元素
+      const iconDiv = document.createElement('div');
+      iconDiv.className = 'completion-icon';
+      iconDiv.textContent = '🍅';
+      completionDiv.appendChild(iconDiv);
+      
+      // 创建文本元素
+      const textDiv = document.createElement('div');
+      textDiv.className = 'completion-text';
+      textDiv.textContent = '专注时间完成！';
+      completionDiv.appendChild(textDiv);
+      
+      // 创建任务标题元素（使用textContent防止XSS）
+      const taskDiv = document.createElement('div');
+      taskDiv.className = 'completion-task';
+      taskDiv.textContent = taskTitle || '';
+      completionDiv.appendChild(taskDiv);
+      
+      messageElement.appendChild(completionDiv);
+    }
+  }
+
+  /**
+   * 显示/隐藏操作按钮
+   * @param {boolean} show - 是否显示
+   */
+  showActionButtons(show) {
+    const buttons = this.container.querySelectorAll(".focus-action-btn");
+    buttons.forEach(btn => {
+      btn.classList.toggle("hidden", !show);
+    });
+
+    if (show) {
+      this.updateActionButtons("running");
+    }
+  }
+
+  /**
+   * 更新操作按钮状态
+   * @param {string} status - 计时器状态
+   */
+  updateActionButtons(status) {
+    const pauseBtn = this.container.querySelector("#pause-btn");
+    const resumeBtn = this.container.querySelector("#resume-btn");
+    const stopBtn = this.container.querySelector("#stop-btn");
+
+    switch (status) {
+      case "running":
+        pauseBtn.classList.remove("hidden");
+        resumeBtn.classList.add("hidden");
+        stopBtn.classList.remove("hidden");
+        break;
+      case "paused":
+        pauseBtn.classList.add("hidden");
+        resumeBtn.classList.remove("hidden");
+        stopBtn.classList.remove("hidden");
+        break;
+      default:
+        pauseBtn.classList.add("hidden");
+        resumeBtn.classList.add("hidden");
+        stopBtn.classList.add("hidden");
+    }
+  }
+
+  /**
+   * 显示专注页面
+   */
+  show() {
+    if (!this.container) return;
+
+    this.container.classList.remove("hidden");
+    this.isVisible = true;
+
+    // 添加显示动画
+    setTimeout(() => {
+      this.container.classList.add("show");
+    }, 10);
+
+    // 阻止页面滚动
+    document.body.style.overflow = "hidden";
+  }
+
+  /**
+   * 隐藏专注页面
+   */
+  hide() {
+    if (!this.container) return;
+
+    this.container.classList.remove("show");
+    this.isVisible = false;
+
+    // 动画完成后隐藏
+    setTimeout(() => {
+      this.container.classList.add("hidden");
+      document.body.style.overflow = "";
+      this.reset();
+    }, 300);
+  }
+
+  /**
+   * 重置页面状态
+   */
+  reset() {
+    this.updateTaskInfo("准备开始专注...");
+    this.updateCountdown(1500); // 重置为25分钟
+    this.updateStatus("就绪", "idle");
+    this.updateProgress(0);
+    this.showActionButtons(false);
+    
+    // 重置提示
+    const hintElement = this.container.querySelector(".focus-hint");
+    if (hintElement) {
+      hintElement.textContent = "保持专注，距离完成还有一段时间";
+    }
+  }
+
+  /**
+   * 格式化时间显示
+   * @param {number} seconds - 秒数
+   * @returns {string} 格式化的时间 (MM:SS)
+   */
+  formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * 检查页面是否可见
+   * @returns {boolean} 是否可见
+   */
+  isPageVisible() {
+    return this.isVisible;
+  }
+
+  /**
+   * 销毁专注页面
+   */
+  destroy() {
+    this.unbindTimerManager();
+    
+    if (this.container && this.container.parentNode) {
+      this.container.parentNode.removeChild(this.container);
+    }
+
+    // 恢复页面滚动
+    document.body.style.overflow = "";
+
+    this.container = null;
+    this.isInitialized = false;
+    this.isVisible = false;
+
+    console.log("[FocusPage] Destroyed");
+  }
+}
+
+// 如果在浏览器环境中，将其添加到全局对象
+if (typeof window !== "undefined") {
+  window.FocusPage = FocusPage;
 }
     
     // ========== 应用程序主类 ==========
@@ -3265,6 +4420,33 @@ color: #e53935;
 outline: 2px solid #e53935;
 outline-offset: 2px;
 }
+.start-focus-button {
+display: flex;
+align-items: center;
+justify-content: center;
+width: 32px;
+height: 32px;
+background: none;
+border: none;
+color: #757575;
+cursor: pointer;
+border-radius: 4px;
+font-size: 14px;
+transition: all 0.2s ease;
+margin-right: 4px;
+}
+.start-focus-button:hover {
+background: rgba(217, 85, 80, 0.1);
+color: #D95550;
+transform: scale(1.05);
+}
+.start-focus-button:focus {
+outline: 2px solid #D95550;
+outline-offset: 2px;
+}
+.start-focus-button:active {
+transform: scale(0.95);
+}
 @media (max-width: 768px) {
 .tomato-monkey-settings-panel {
 width: 95vw;
@@ -3759,6 +4941,349 @@ scroll-behavior: auto !important;
 .loading-spinner {
 animation: none;
 }
+}
+.focus-page-container {
+position: fixed;
+top: 0;
+left: 0;
+width: 100vw;
+height: 100vh;
+z-index: 20000;
+display: flex;
+align-items: center;
+justify-content: center;
+font-family: "Inter", "Lato", "Helvetica Neue", "Arial", sans-serif;
+opacity: 0;
+visibility: hidden;
+transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.focus-page-container.show {
+opacity: 1;
+visibility: visible;
+}
+.focus-page-overlay {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(255, 255, 255, 0.98);
+backdrop-filter: blur(10px);
+-webkit-backdrop-filter: blur(10px);
+}
+.focus-page-content {
+position: relative;
+z-index: 1;
+text-align: center;
+max-width: 600px;
+width: 90%;
+padding: 40px 20px;
+background: rgba(255, 255, 255, 0.9);
+border-radius: 20px;
+box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.focus-header {
+margin-bottom: 40px;
+}
+.focus-task-title {
+font-size: 24px;
+font-weight: 600;
+color: #666666;
+margin-bottom: 12px;
+line-height: 1.3;
+word-break: break-word;
+max-width: 100%;
+}
+.focus-status {
+font-size: 16px;
+font-weight: 500;
+color: #757575;
+margin-bottom: 8px;
+opacity: 0.8;
+}
+.focus-status.running {
+color: #D95550;
+}
+.focus-status.paused {
+color: #FF9800;
+}
+.focus-status.completed {
+color: #70A85C;
+}
+.focus-timer {
+margin-bottom: 40px;
+}
+.countdown-display {
+font-size: 72px;
+font-weight: 700;
+color: #D95550;
+margin-bottom: 20px;
+line-height: 1;
+font-variant-numeric: tabular-nums;
+letter-spacing: -0.02em;
+text-shadow: 0 2px 10px rgba(217, 85, 80, 0.2);
+transition: all 0.3s ease;
+}
+.countdown-display.warning {
+color: #FF9800;
+animation: pulse-warning 2s infinite;
+}
+.countdown-display.urgent {
+color: #E53935;
+animation: pulse-urgent 1s infinite;
+}
+@keyframes pulse-warning {
+0%, 100% { transform: scale(1); }
+50% { transform: scale(1.02); }
+}
+@keyframes pulse-urgent {
+0%, 100% { transform: scale(1); }
+50% { transform: scale(1.05); }
+}
+.countdown-progress {
+width: 100%;
+height: 6px;
+background: rgba(217, 85, 80, 0.1);
+border-radius: 3px;
+overflow: hidden;
+margin-bottom: 20px;
+}
+.progress-bar {
+height: 100%;
+background: linear-gradient(90deg, #D95550, #E06B66);
+border-radius: 3px;
+transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+width: 0%;
+box-shadow: 0 1px 3px rgba(217, 85, 80, 0.3);
+}
+.focus-actions {
+margin-bottom: 30px;
+display: flex;
+justify-content: center;
+gap: 16px;
+flex-wrap: wrap;
+}
+.focus-action-btn {
+background: #ffffff;
+border: 2px solid #D95550;
+color: #D95550;
+font-size: 16px;
+font-weight: 500;
+padding: 12px 24px;
+border-radius: 8px;
+cursor: pointer;
+transition: all 0.2s ease;
+outline: none;
+font-family: inherit;
+min-width: 100px;
+}
+.focus-action-btn:hover {
+background: #D95550;
+color: #ffffff;
+transform: translateY(-1px);
+box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
+}
+.focus-action-btn:active {
+transform: translateY(0);
+box-shadow: 0 2px 6px rgba(217, 85, 80, 0.3);
+}
+.pause-btn {
+border-color: #FF9800;
+color: #FF9800;
+}
+.pause-btn:hover {
+background: #FF9800;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+}
+.resume-btn {
+border-color: #70A85C;
+color: #70A85C;
+}
+.resume-btn:hover {
+background: #70A85C;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(112, 168, 92, 0.3);
+}
+.focus-info {
+margin-top: 20px;
+}
+.focus-hint {
+font-size: 16px;
+color: #757575;
+opacity: 0.8;
+line-height: 1.5;
+}
+.completion-message {
+text-align: center;
+}
+.completion-icon {
+font-size: 48px;
+margin-bottom: 16px;
+}
+.completion-text {
+font-size: 24px;
+font-weight: 600;
+color: #70A85C;
+margin-bottom: 12px;
+}
+.completion-task {
+font-size: 18px;
+color: #666666;
+opacity: 0.8;
+}
+@media (max-width: 768px) {
+.focus-page-content {
+width: 95%;
+padding: 30px 16px;
+}
+.countdown-display {
+font-size: 64px;
+}
+.focus-task-title {
+font-size: 20px;
+}
+.focus-actions {
+gap: 12px;
+}
+.focus-action-btn {
+font-size: 14px;
+padding: 10px 20px;
+min-width: 80px;
+}
+}
+@media (max-width: 480px) {
+.focus-page-content {
+width: 95%;
+padding: 24px 12px;
+margin: 20px 0;
+border-radius: 16px;
+}
+.focus-header {
+margin-bottom: 30px;
+}
+.countdown-display {
+font-size: 56px;
+margin-bottom: 16px;
+}
+.focus-task-title {
+font-size: 18px;
+margin-bottom: 8px;
+}
+.focus-status {
+font-size: 14px;
+}
+.countdown-progress {
+height: 4px;
+margin-bottom: 16px;
+}
+.focus-timer {
+margin-bottom: 30px;
+}
+.focus-actions {
+flex-direction: column;
+align-items: center;
+gap: 8px;
+}
+.focus-action-btn {
+font-size: 14px;
+padding: 10px 20px;
+width: 140px;
+}
+.focus-hint {
+font-size: 14px;
+}
+.completion-icon {
+font-size: 40px;
+margin-bottom: 12px;
+}
+.completion-text {
+font-size: 20px;
+margin-bottom: 8px;
+}
+.completion-task {
+font-size: 16px;
+}
+}
+@media (max-width: 360px) {
+.countdown-display {
+font-size: 48px;
+}
+.focus-task-title {
+font-size: 16px;
+}
+.focus-action-btn {
+width: 120px;
+}
+}
+@media (min-width: 1200px) {
+.focus-page-content {
+max-width: 700px;
+padding: 60px 40px;
+}
+.countdown-display {
+font-size: 84px;
+}
+.focus-task-title {
+font-size: 28px;
+}
+.focus-status {
+font-size: 18px;
+}
+.focus-hint {
+font-size: 18px;
+}
+}
+@media (prefers-contrast: high) {
+.focus-page-overlay {
+background: rgba(255, 255, 255, 0.99);
+}
+.focus-page-content {
+background: #ffffff;
+border: 2px solid #000000;
+}
+.countdown-display {
+text-shadow: none;
+}
+.focus-action-btn {
+border-width: 3px;
+}
+}
+@media (prefers-reduced-motion: reduce) {
+.focus-page-container,
+.countdown-display,
+.progress-bar,
+.focus-action-btn {
+transition: none;
+}
+.countdown-display.warning,
+.countdown-display.urgent {
+animation: none;
+}
+}
+@media (prefers-color-scheme: dark) {
+.focus-page-overlay {
+background: rgba(30, 30, 30, 0.98);
+}
+.focus-page-content {
+background: rgba(40, 40, 40, 0.95);
+border-color: rgba(255, 255, 255, 0.1);
+}
+.focus-task-title {
+color: #e0e0e0;
+}
+.focus-status {
+color: #b0b0b0;
+}
+.focus-hint {
+color: #a0a0a0;
+}
+.focus-action-btn {
+background: rgba(60, 60, 60, 0.8);
+}
 }`;
             GM_addStyle(styles);
         }
@@ -3773,6 +5298,14 @@ animation: none;
             // 初始化任务管理器
             this.taskManager = TaskManager.getInstance();
             await this.taskManager.initialize(this.storageManager);
+            
+            // 初始化计时器管理器
+            this.timerManager = TimerManager.getInstance();
+            await this.timerManager.initialize(this.storageManager);
+            
+            // 初始化专注页面
+            this.focusPage = new FocusPage();
+            this.focusPage.initialize(this.timerManager);
             
             console.log('[TomatoMonkey] Core modules initialized');
         }

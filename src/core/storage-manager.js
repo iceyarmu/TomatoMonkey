@@ -211,6 +211,57 @@ class StorageManager {
   }
 
   /**
+   * 通用方法：保存数据到存储
+   * @param {string} key - 存储键
+   * @param {any} value - 要保存的值
+   * @returns {boolean} 保存是否成功
+   */
+  setData(key, value) {
+    try {
+      const serializedData = JSON.stringify(value);
+      GM_setValue(key, serializedData);
+      return true;
+    } catch (error) {
+      console.error(`[StorageManager] Failed to set data for key ${key}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * 通用方法：从存储获取数据
+   * @param {string} key - 存储键
+   * @param {any} defaultValue - 默认值
+   * @returns {any} 存储的值或默认值
+   */
+  getData(key, defaultValue = null) {
+    try {
+      const serializedData = GM_getValue(key, null);
+      if (serializedData === null || serializedData === undefined) {
+        return defaultValue;
+      }
+      return JSON.parse(serializedData);
+    } catch (error) {
+      console.error(`[StorageManager] Failed to get data for key ${key}:`, error);
+      return defaultValue;
+    }
+  }
+
+  /**
+   * 通用方法：从存储删除数据
+   * @param {string} key - 存储键
+   * @returns {boolean} 删除是否成功
+   */
+  removeData(key) {
+    try {
+      GM_setValue(key, undefined);
+      return true;
+    } catch (error) {
+      console.error(`[StorageManager] Failed to remove data for key ${key}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * 获取存储统计信息
    * @returns {Object} 存储统计信息
    */

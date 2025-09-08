@@ -612,6 +612,38 @@
   outline-offset: 2px;
 }
 
+/* 开始专注按钮 */
+.start-focus-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  color: #757575;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  margin-right: 4px;
+}
+
+.start-focus-button:hover {
+  background: rgba(217, 85, 80, 0.1);
+  color: #D95550;
+  transform: scale(1.05);
+}
+
+.start-focus-button:focus {
+  outline: 2px solid #D95550;
+  outline-offset: 2px;
+}
+
+.start-focus-button:active {
+  transform: scale(0.95);
+}
+
 /* ========== 响应式设计 ========== */
 @media (max-width: 768px) {
   .tomato-monkey-settings-panel {

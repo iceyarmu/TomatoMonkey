@@ -285,6 +285,47 @@ class TodoList {
   }
 
   /**
+   * 开始专注会话
+   * @param {string} taskId - 任务ID
+   * @param {string} taskTitle - 任务标题
+   */
+  startFocusSession(taskId, taskTitle) {
+    try {
+      // 获取TimerManager实例
+      const timerManager = window.TimerManager ? window.TimerManager.getInstance() : null;
+      
+      if (!timerManager) {
+        this.showError("计时器模块未就绪，请刷新页面重试");
+        console.error("[TodoList] TimerManager not available");
+        return;
+      }
+
+      // 检查是否已有计时器在运行
+      const timerState = timerManager.getTimerState();
+      if (timerState.status === "running") {
+        const confirmed = confirm("已有计时器在运行中，是否要停止当前计时器并开始新的专注会话？");
+        if (!confirmed) return;
+        
+        timerManager.stopTimer();
+      }
+
+      // 启动计时器 (默认25分钟)
+      const started = timerManager.startTimer(taskId, taskTitle, 1500);
+      
+      if (started) {
+        console.log(`[TodoList] Started focus session for task: ${taskTitle}`);
+      } else {
+        this.showError("无法启动专注会话，请重试");
+        console.error("[TodoList] Failed to start timer");
+      }
+
+    } catch (error) {
+      console.error("[TodoList] Failed to start focus session:", error);
+      this.showError("启动专注会话失败，请重试");
+    }
+  }
+
+  /**
    * 清除所有已完成任务
    */
   async clearCompletedTasks() {
@@ -352,6 +393,16 @@ class TodoList {
                 </div>
                 
                 <div class="task-actions">
+                    ${!task.isCompleted ? `
+                        <button 
+                            type="button" 
+                            class="start-focus-button" 
+                            title="开始专注"
+                            aria-label="开始专注: ${task.title}"
+                        >
+                            🍅
+                        </button>
+                    ` : ""}
                     <button 
                         type="button" 
                         class="delete-task-button" 
@@ -378,6 +429,12 @@ class TodoList {
     // 复选框点击
     if (e.target.classList.contains("task-checkbox")) {
       this.toggleTask(taskId);
+    }
+
+    // 开始专注按钮点击
+    else if (e.target.classList.contains("start-focus-button")) {
+      const taskTitle = taskItem.querySelector(".task-title").textContent;
+      this.startFocusSession(taskId, taskTitle);
     }
 
     // 删除按钮点击
