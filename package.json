@@ -8,7 +8,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "bmad:refresh": "bmad-method install -f -i codex",
+    "bmad:list": "bmad-method list:agents",
+    "bmad:validate": "bmad-method validate"
   },
   "keywords": [
     "tampermonkey",

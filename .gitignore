@@ -7,3 +7,7 @@ dist
 .idea
 *.log
 *.tmp
+coverage
+.env
+.env.local
+.env.*.local

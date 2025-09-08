@@ -142,7 +142,7 @@
                     throw new Error(`Task at index ${i} has invalid pomodoroCount`);
                 }
 
-                if (task.completedAt !== undefined && 
+                if (task.completedAt !== undefined && task.completedAt !== null &&
                     (typeof task.completedAt !== 'number' || task.completedAt <= 0)) {
                     throw new Error(`Task at index ${i} has invalid completedAt`);
                 }

@@ -1,0 +1,9 @@
+# Ignore the main Tampermonkey userscript file
+# It contains inline CSS and modules that confuse prettier
+tomatomonkey.user.js
+
+# Ignore build and coverage directories
+coverage/
+dist/
+build/
+node_modules/

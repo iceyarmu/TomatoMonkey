@@ -1,0 +1,19 @@
+schema: 1
+story: "1.1"
+story_title: "设置面板框架与ToDo列表功能"
+gate: "PASS" # PASS|CONCERNS|FAIL|WAIVED
+status_reason: "All prior concerns resolved: tests now exercise src core modules with coverage and UI/A11y fixes applied."
+reviewer: "Quinn (Test Architect)"
+updated: "2025-09-08T04:51:48Z"
+
+waiver:
+  active: false
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor:
+      - "Verify contrast and hidden utility remain consistent as UI grows; consider component-level tests to improve coverage."

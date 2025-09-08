@@ -4,728 +4,737 @@
  * 设计规范：
  * - 主色: #D95550 (番茄红)
  * - 辅助色: #70A85C (绿色) 
- * - 中性色: #FFFFFF, #F5F5F5, #666666, #BBBBBB
+ * - 中性色: #FFFFFF, #F5F5F5, #666666, #757575 (修复 A11Y-001: 原 #757575)
  * - 错误色: #E53935
  * - 字体: Inter, Lato, Helvetica Neue, Arial
  * - H2: 18px, Body: 14px
- * - 对比度: ≥4.5:1
+ * - 对比度: ≥4.5:1 (WCAG 2.1 AA)
  */
 
 /* ========== 全局样式 ========== */
 .tomato-monkey-panel *,
 .tomato-monkey-panel *::before,
 .tomato-monkey-panel *::after {
-    box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .tomato-monkey-panel {
-    font-family: "Inter", "Lato", "Helvetica Neue", "Arial", sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
-    color: #666666;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  font-family: "Inter", "Lato", "Helvetica Neue", "Arial", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #666666;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 隐藏工具类 */
+/* 全局隐藏工具类 - 修复 UI-001 */
+.hidden {
+  display: none !important;
+}
+
+/* 兼容性：保留原有的作用域规则 */
 .tomato-monkey-panel .hidden {
-    display: none !important;
+  display: none !important;
 }
 
 /* 无障碍性支持 */
 .tomato-monkey-panel .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ========== 设置面板样式 ========== */
 .tomato-monkey-settings-panel {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(0.9);
-    width: 90vw;
-    max-width: 800px;
-    height: 80vh;
-    max-height: 600px;
-    background: #FFFFFF;
-    border-radius: 12px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-    z-index: 10000;
-    display: flex;
-    flex-direction: column;
-    opacity: 0;
-    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-    overflow: hidden;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  width: 90vw;
+  max-width: 800px;
+  height: 80vh;
+  max-height: 600px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
 }
 
 .tomato-monkey-settings-panel.show {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
 }
 
 /* 面板头部 */
 .settings-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 24px;
-    background: #FFFFFF;
-    border-bottom: 1px solid #F5F5F5;
-    flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #f5f5f5;
+  flex-shrink: 0;
 }
 
 .header-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .header-icon {
-    font-size: 24px;
-    line-height: 1;
+  font-size: 24px;
+  line-height: 1;
 }
 
 .header-title h2 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #666666;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #666666;
 }
 
 .close-button {
-    background: none;
-    border: none;
-    font-size: 18px;
-    color: #BBBBBB;
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-    line-height: 1;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #757575;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  line-height: 1;
 }
 
 .close-button:hover {
-    color: #D95550;
-    background: #F5F5F5;
+  color: #d95550;
+  background: #f5f5f5;
 }
 
 .close-button:focus {
-    outline: 2px solid #D95550;
-    outline-offset: 2px;
+  outline: 2px solid #d95550;
+  outline-offset: 2px;
 }
 
 /* 面板主体 */
 .settings-body {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
 /* 左侧导航 */
 .settings-navigation {
-    width: 200px;
-    background: #F5F5F5;
-    border-right: 1px solid #BBBBBB;
-    flex-shrink: 0;
+  width: 200px;
+  background: #f5f5f5;
+  border-right: 1px solid #757575;
+  flex-shrink: 0;
 }
 
 .tab-list {
-    list-style: none;
-    margin: 0;
-    padding: 16px 0;
+  list-style: none;
+  margin: 0;
+  padding: 16px 0;
 }
 
 .tab-item {
-    margin: 0;
+  margin: 0;
 }
 
 .tab-button {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    padding: 12px 20px;
-    background: none;
-    border: none;
-    color: #666666;
-    font-size: 14px;
-    text-align: left;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border-left: 3px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 20px;
+  background: none;
+  border: none;
+  color: #666666;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
 }
 
 .tab-button:hover {
-    background: rgba(217, 85, 80, 0.1);
-    color: #D95550;
+  background: rgba(217, 85, 80, 0.1);
+  color: #d95550;
 }
 
 .tab-button.active {
-    background: #FFFFFF;
-    color: #D95550;
-    border-left-color: #D95550;
-    font-weight: 500;
+  background: #ffffff;
+  color: #d95550;
+  border-left-color: #d95550;
+  font-weight: 500;
 }
 
 .tab-button:focus {
-    outline: 2px solid #D95550;
-    outline-offset: -2px;
+  outline: 2px solid #d95550;
+  outline-offset: -2px;
 }
 
 .tab-icon {
-    font-size: 16px;
-    line-height: 1;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .tab-name {
-    font-size: 14px;
+  font-size: 14px;
 }
 
 /* 右侧内容区域 */
 .settings-content {
-    flex: 1;
-    background: #FFFFFF;
-    overflow-y: auto;
-    scroll-behavior: smooth;
+  flex: 1;
+  background: #ffffff;
+  overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .content-panel {
-    display: none;
-    padding: 24px;
-    height: 100%;
+  display: none;
+  padding: 24px;
+  height: 100%;
 }
 
 .content-panel.active {
-    display: block;
+  display: block;
 }
 
 .panel-header {
-    margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #F5F5F5;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f5f5f5;
 }
 
 .panel-header h3 {
-    margin: 0 0 8px 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #666666;
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #666666;
 }
 
 .panel-header p {
-    margin: 0;
-    color: #BBBBBB;
-    font-size: 14px;
+  margin: 0;
+  color: #757575;
+  font-size: 14px;
 }
 
 /* 占位符内容 */
 .placeholder-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 200px;
-    text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  text-align: center;
 }
 
 .placeholder-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
 }
 
 /* ========== ToDo 列表样式 ========== */
 .todo-container {
-    display: flex;
-    flex-direction: column;
-    height: calc(100% - 80px);
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 80px);
 }
 
 /* 输入区域 */
 .todo-input-section {
-    margin-bottom: 20px;
+  margin-bottom: 20px;
 }
 
 .input-group {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .todo-input {
-    flex: 1;
-    padding: 12px 16px;
-    border: 2px solid #F5F5F5;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #666666;
-    transition: all 0.2s ease;
-    background: #FFFFFF;
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid #f5f5f5;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #666666;
+  transition: all 0.2s ease;
+  background: #ffffff;
 }
 
 .todo-input:focus {
-    outline: none;
-    border-color: #D95550;
-    box-shadow: 0 0 0 3px rgba(217, 85, 80, 0.1);
+  outline: none;
+  border-color: #d95550;
+  box-shadow: 0 0 0 3px rgba(217, 85, 80, 0.1);
 }
 
 .todo-input.error {
-    border-color: #E53935;
+  border-color: #e53935;
 }
 
 .todo-input::placeholder {
-    color: #BBBBBB;
+  color: #757575;
 }
 
 .add-task-button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 20px;
-    background: #D95550;
-    color: #FFFFFF;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 20px;
+  background: #d95550;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .add-task-button:hover:not(:disabled) {
-    background: #c94943;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
+  background: #c94943;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
 }
 
 .add-task-button:focus {
-    outline: 2px solid #D95550;
-    outline-offset: 2px;
+  outline: 2px solid #d95550;
+  outline-offset: 2px;
 }
 
 .add-task-button:disabled {
-    background: #BBBBBB;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
+  background: #757575;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .add-task-button.loading {
-    opacity: 0.7;
+  opacity: 0.7;
 }
 
 .button-icon {
-    font-size: 16px;
-    font-weight: bold;
-    line-height: 1;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
 }
 
 .input-error-message {
-    color: #E53935;
-    font-size: 12px;
-    margin-top: 4px;
-    padding-left: 4px;
+  color: #e53935;
+  font-size: 12px;
+  margin-top: 4px;
+  padding-left: 4px;
 }
 
 /* 统计区域 */
 .todo-stats-section {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-    padding: 16px;
-    background: #F5F5F5;
-    border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 8px;
 }
 
 .stats-display {
-    display: flex;
-    gap: 24px;
+  display: flex;
+  gap: 24px;
 }
 
 .stats-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 
 .stats-label {
-    color: #BBBBBB;
-    font-weight: 400;
+  color: #757575;
+  font-weight: 400;
 }
 
 .stats-value {
-    color: #666666;
-    font-weight: 600;
-    font-size: 14px;
+  color: #666666;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .clear-completed-button {
-    padding: 6px 12px;
-    background: #E53935;
-    color: #FFFFFF;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.2s ease;
+  padding: 6px 12px;
+  background: #e53935;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .clear-completed-button:hover {
-    background: #d32f2f;
-    transform: translateY(-1px);
+  background: #d32f2f;
+  transform: translateY(-1px);
 }
 
 .clear-completed-button:focus {
-    outline: 2px solid #E53935;
-    outline-offset: 2px;
+  outline: 2px solid #e53935;
+  outline-offset: 2px;
 }
 
 /* 任务列表区域 */
 .todo-list-section {
-    flex: 1;
-    overflow-y: auto;
+  flex: 1;
+  overflow-y: auto;
 }
 
 /* 加载指示器 */
 .loading-indicator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 40px;
-    color: #BBBBBB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: #757575;
 }
 
 .loading-spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid #F5F5F5;
-    border-top: 2px solid #D95550;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f5f5f5;
+  border-top: 2px solid #d95550;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* 空状态 */
 .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 40px;
-    text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 40px;
+  text-align: center;
 }
 
 .empty-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
 }
 
 .empty-state h4 {
-    margin: 0 0 8px 0;
-    font-size: 16px;
-    font-weight: 500;
-    color: #666666;
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #666666;
 }
 
 .empty-state p {
-    margin: 0;
-    color: #BBBBBB;
-    font-size: 14px;
+  margin: 0;
+  color: #757575;
+  font-size: 14px;
 }
 
 /* 任务列表 */
 .task-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .task-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px;
-    border-bottom: 1px solid #F5F5F5;
-    transition: all 0.2s ease;
-    background: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #f5f5f5;
+  transition: all 0.2s ease;
+  background: #ffffff;
 }
 
 .task-item:hover {
-    background: #FAFAFA;
+  background: #fafafa;
 }
 
 .task-item.completed {
-    opacity: 0.7;
+  opacity: 0.7;
 }
 
 .task-content {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
 }
 
 /* 自定义复选框 */
 .task-checkbox-label {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    user-select: none;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
 }
 
 .task-checkbox {
-    position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
 }
 
 .checkbox-custom {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border: 2px solid #BBBBBB;
-    border-radius: 4px;
-    background: #FFFFFF;
-    transition: all 0.2s ease;
-    position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #757575;
+  border-radius: 4px;
+  background: #ffffff;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
 .task-checkbox:checked + .checkbox-custom {
-    background: #70A85C;
-    border-color: #70A85C;
+  background: #70a85c;
+  border-color: #70a85c;
 }
 
 .task-checkbox:checked + .checkbox-custom::after {
-    content: '✓';
-    color: #FFFFFF;
-    font-size: 12px;
-    font-weight: bold;
+  content: "✓";
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .task-checkbox:focus + .checkbox-custom {
-    outline: 2px solid #D95550;
-    outline-offset: 2px;
+  outline: 2px solid #d95550;
+  outline-offset: 2px;
 }
 
 .task-checkbox-label:hover .checkbox-custom {
-    border-color: #D95550;
+  border-color: #d95550;
 }
 
 /* 任务详情 */
 .task-details {
-    flex: 1;
+  flex: 1;
 }
 
 .task-title {
-    font-size: 14px;
-    color: #666666;
-    font-weight: 400;
-    margin-bottom: 4px;
-    word-wrap: break-word;
-    line-height: 1.4;
+  font-size: 14px;
+  color: #666666;
+  font-weight: 400;
+  margin-bottom: 4px;
+  word-wrap: break-word;
+  line-height: 1.4;
 }
 
 .task-item.completed .task-title {
-    text-decoration: line-through;
-    color: #BBBBBB;
+  text-decoration: line-through;
+  color: #757575;
 }
 
 .task-meta {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    font-size: 12px;
-    color: #BBBBBB;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #757575;
 }
 
 .task-date,
 .task-completed-date,
 .pomodoro-count {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .pomodoro-count {
-    color: #D95550;
-    font-weight: 500;
+  color: #d95550;
+  font-weight: 500;
 }
 
 /* 任务操作 */
 .task-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .delete-task-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: none;
-    border: none;
-    color: #BBBBBB;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-    font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  color: #757575;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  font-size: 14px;
 }
 
 .delete-task-button:hover {
-    background: rgba(229, 57, 53, 0.1);
-    color: #E53935;
+  background: rgba(229, 57, 53, 0.1);
+  color: #e53935;
 }
 
 .delete-task-button:focus {
-    outline: 2px solid #E53935;
-    outline-offset: 2px;
+  outline: 2px solid #e53935;
+  outline-offset: 2px;
 }
 
 /* ========== 响应式设计 ========== */
 @media (max-width: 768px) {
-    .tomato-monkey-settings-panel {
-        width: 95vw;
-        height: 90vh;
-        max-height: none;
-    }
-    
-    .settings-body {
-        flex-direction: column;
-    }
-    
-    .settings-navigation {
-        width: 100%;
-        max-height: 120px;
-        overflow-y: auto;
-    }
-    
-    .tab-list {
-        display: flex;
-        padding: 8px;
-    }
-    
-    .tab-item {
-        flex: 1;
-    }
-    
-    .tab-button {
-        padding: 8px 12px;
-        border-left: none;
-        border-bottom: 3px solid transparent;
-        text-align: center;
-        flex-direction: column;
-        gap: 4px;
-    }
-    
-    .tab-button.active {
-        border-left: none;
-        border-bottom-color: #D95550;
-    }
-    
-    .tab-name {
-        font-size: 12px;
-    }
-    
-    .content-panel {
-        padding: 16px;
-    }
-    
-    .stats-display {
-        gap: 16px;
-    }
-    
-    .stats-item {
-        flex-direction: column;
-        gap: 2px;
-        text-align: center;
-    }
-    
-    .input-group {
-        flex-direction: column;
-    }
-    
-    .add-task-button {
-        justify-content: center;
-    }
+  .tomato-monkey-settings-panel {
+    width: 95vw;
+    height: 90vh;
+    max-height: none;
+  }
+
+  .settings-body {
+    flex-direction: column;
+  }
+
+  .settings-navigation {
+    width: 100%;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+
+  .tab-list {
+    display: flex;
+    padding: 8px;
+  }
+
+  .tab-item {
+    flex: 1;
+  }
+
+  .tab-button {
+    padding: 8px 12px;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    text-align: center;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tab-button.active {
+    border-left: none;
+    border-bottom-color: #d95550;
+  }
+
+  .tab-name {
+    font-size: 12px;
+  }
+
+  .content-panel {
+    padding: 16px;
+  }
+
+  .stats-display {
+    gap: 16px;
+  }
+
+  .stats-item {
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+  }
+
+  .input-group {
+    flex-direction: column;
+  }
+
+  .add-task-button {
+    justify-content: center;
+  }
 }
 
 @media (max-width: 480px) {
-    .todo-stats-section {
-        flex-direction: column;
-        gap: 16px;
-        align-items: stretch;
-    }
-    
-    .stats-display {
-        justify-content: space-around;
-    }
-    
-    .task-item {
-        padding: 12px;
-    }
-    
-    .task-meta {
-        flex-direction: column;
-        gap: 4px;
-    }
+  .todo-stats-section {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .stats-display {
+    justify-content: space-around;
+  }
+
+  .task-item {
+    padding: 12px;
+  }
+
+  .task-meta {
+    flex-direction: column;
+    gap: 4px;
+  }
 }
 
 /* ========== 打印样式 ========== */
 @media print {
-    .tomato-monkey-overlay,
-    .tomato-monkey-settings-panel {
-        display: none !important;
-    }
+  .tomato-monkey-overlay,
+  .tomato-monkey-settings-panel {
+    display: none !important;
+  }
 }
 
 /* ========== 高对比度模式支持 ========== */
 @media (prefers-contrast: high) {
-    .task-checkbox-label:hover .checkbox-custom {
-        border-color: #000000;
-    }
-    
-    .tab-button:hover {
-        background: #000000;
-        color: #FFFFFF;
-    }
-    
-    .add-task-button:hover:not(:disabled) {
-        background: #000000;
-    }
+  .task-checkbox-label:hover .checkbox-custom {
+    border-color: #000000;
+  }
+
+  .tab-button:hover {
+    background: #000000;
+    color: #ffffff;
+  }
+
+  .add-task-button:hover:not(:disabled) {
+    background: #000000;
+  }
 }
 
 /* ========== 动画偏好设置 ========== */
 @media (prefers-reduced-motion: reduce) {
-    * {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-    }
-    
-    .loading-spinner {
-        animation: none;
-    }
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .loading-spinner {
+    animation: none;
+  }
 }
