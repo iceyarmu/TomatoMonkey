@@ -306,7 +306,7 @@ class TodoList {
         const confirmed = confirm("已有计时器在运行中，是否要停止当前计时器并开始新的专注会话？");
         if (!confirmed) return;
         
-        timerManager.stopTimer();
+        timerManager.stopTimer(true);
       }
 
       // 启动计时器 (默认25分钟)

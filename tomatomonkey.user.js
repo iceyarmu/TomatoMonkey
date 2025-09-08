@@ -1465,7 +1465,7 @@ if (typeof window !== "undefined") {
   /**
    * 停止计时器
    */
-  stopTimer() {
+  stopTimer(donotNotify) {
     if (this.status === "idle") {
       console.warn("[TimerManager] Timer is already idle");
       return false;
@@ -1474,7 +1474,9 @@ if (typeof window !== "undefined") {
     this.clearCountdown();
     this.resetTimer();
     this.clearTimerState();
-    this.notifyObservers("timerStopped", {});
+    if (!donotNotify) {
+      this.notifyObservers("timerStopped", {});
+    }
 
     console.log("[TimerManager] Timer stopped");
     return true;
@@ -3020,7 +3022,7 @@ class TodoList {
         const confirmed = confirm("已有计时器在运行中，是否要停止当前计时器并开始新的专注会话？");
         if (!confirmed) return;
         
-        timerManager.stopTimer();
+        timerManager.stopTimer(true);
       }
 
       // 启动计时器 (默认25分钟)

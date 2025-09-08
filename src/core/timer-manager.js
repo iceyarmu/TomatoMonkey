@@ -168,7 +168,7 @@ class TimerManager {
   /**
    * 停止计时器
    */
-  stopTimer() {
+  stopTimer(donotNotify) {
     if (this.status === "idle") {
       console.warn("[TimerManager] Timer is already idle");
       return false;
@@ -177,7 +177,9 @@ class TimerManager {
     this.clearCountdown();
     this.resetTimer();
     this.clearTimerState();
-    this.notifyObservers("timerStopped", {});
+    if (!donotNotify) {
+      this.notifyObservers("timerStopped", {});
+    }
 
     console.log("[TimerManager] Timer stopped");
     return true;
