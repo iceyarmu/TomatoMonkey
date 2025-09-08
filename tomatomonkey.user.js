@@ -3523,6 +3523,12 @@ if (typeof window !== "undefined") {
           </div>
         </div>
         
+        <div class="focus-info">
+          <div class="focus-hint">
+            保持专注，距离完成还有一段时间
+          </div>
+        </div>
+        
         <div class="focus-actions">
           <button type="button" class="focus-action-btn pause-btn hidden" id="pause-btn">
             暂停
@@ -3548,12 +3554,6 @@ if (typeof window !== "undefined") {
             ⏰ 增加时间
           </button>
         </div>
-        
-        <div class="focus-info">
-          <div class="focus-hint">
-            保持专注，距离完成还有一段时间
-          </div>
-        </div>
       </div>
       
       <!-- Time Modification Modal -->
@@ -3567,7 +3567,7 @@ if (typeof window !== "undefined") {
             <div class="time-input-group">
               <label for="time-input">专注时长 (分钟)</label>
               <input type="number" id="time-input" class="time-input" 
-                     min="1" max="120" placeholder="输入分钟数 (如: 50)">
+                     min="0.1" max="120" step="0.1" placeholder="输入分钟数 (如: 25 或 1.5)">
             </div>
             <div class="time-presets">
               <button type="button" class="preset-btn" data-minutes="25">25分钟</button>
@@ -3594,7 +3594,7 @@ if (typeof window !== "undefined") {
             <div class="time-input-group">
               <label for="extend-time-input">增加时长 (分钟)</label>
               <input type="number" id="extend-time-input" class="time-input" 
-                     min="1" max="60" value="15" placeholder="输入分钟数 (如: 15)">
+                     min="0.1" max="60" step="0.1" value="5" placeholder="输入分钟数 (如: 5 或 2.5)">
             </div>
             <div class="time-presets">
               <button type="button" class="preset-btn" data-minutes="5">5分钟</button>
@@ -3744,7 +3744,7 @@ if (typeof window !== "undefined") {
         // 选中当前按钮
         btn.classList.add("selected");
         // 设置输入值
-        const minutes = parseInt(btn.dataset.minutes);
+        const minutes = parseFloat(btn.dataset.minutes);
         timeInput.value = minutes;
       });
     });
@@ -3796,7 +3796,7 @@ if (typeof window !== "undefined") {
         // 选中当前按钮
         btn.classList.add("selected");
         // 设置输入值
-        const minutes = parseInt(btn.dataset.minutes);
+        const minutes = parseFloat(btn.dataset.minutes);
         timeInput.value = minutes;
       });
     });
@@ -3805,8 +3805,8 @@ if (typeof window !== "undefined") {
     timeInput.addEventListener("input", () => {
       presetBtns.forEach(btn => btn.classList.remove("selected"));
       // 找到匹配的预设按钮并选中
-      const value = parseInt(timeInput.value);
-      const matchingBtn = Array.from(presetBtns).find(btn => parseInt(btn.dataset.minutes) === value);
+      const value = parseFloat(timeInput.value);
+      const matchingBtn = Array.from(presetBtns).find(btn => parseFloat(btn.dataset.minutes) === value);
       if (matchingBtn) {
         matchingBtn.classList.add("selected");
       }
@@ -3873,17 +3873,17 @@ if (typeof window !== "undefined") {
    */
   handleTimeModification() {
     const timeInput = this.container.querySelector("#time-input");
-    const minutes = parseInt(timeInput.value);
+    const minutes = parseFloat(timeInput.value);
 
     // 验证输入
-    if (isNaN(minutes) || minutes < 1 || minutes > 120) {
-      alert("请输入有效的时间（1-120分钟）");
+    if (isNaN(minutes) || minutes < 0.1 || minutes > 120) {
+      alert("请输入有效的时间（0.1-120分钟）");
       timeInput.focus();
       return;
     }
 
-    // 转换为秒
-    const seconds = minutes * 60;
+    // 转换为秒并向上取整
+    const seconds = Math.ceil(minutes * 60);
 
     // 调用TimerManager修改时间
     if (this.timerManager && this.timerManager.modifyTimer(seconds)) {
@@ -4348,15 +4348,15 @@ if (typeof window !== "undefined") {
    */
   async confirmExtendTime() {
     const input = this.container.querySelector("#extend-time-input");
-    const minutes = parseInt(input.value);
+    const minutes = parseFloat(input.value);
     
-    if (isNaN(minutes) || minutes < 1 || minutes > 60) {
-      alert("请输入有效的时间（1-60分钟）");
+    if (isNaN(minutes) || minutes < 0.1 || minutes > 60) {
+      alert("请输入有效的时间（0.1-60分钟）");
       input.focus();
       return;
     }
     
-    const seconds = minutes * 60;
+    const seconds = Math.ceil(minutes * 60);
     
     // 使用 TimerManager 重新启动计时器
     const taskInfo = this.timerManager.getTaskInfo();
@@ -5700,7 +5700,7 @@ color: #ffffff;
 box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
 }
 .focus-info {
-margin-top: 20px;
+margin-bottom: 20px;
 }
 .focus-hint {
 font-size: 16px;
