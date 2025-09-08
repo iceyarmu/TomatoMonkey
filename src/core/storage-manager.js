@@ -22,6 +22,12 @@ class StorageManager {
 
     // 数据版本管理
     this.DATA_VERSION = 1;
+
+    // 默认设置
+    this.DEFAULT_SETTINGS = {
+      pomodoroDuration: 25, // 默认番茄钟时长（分钟）
+      whitelist: [], // 默认空白名单
+    };
   }
 
   /**
@@ -112,6 +118,99 @@ class StorageManager {
   }
 
   /**
+   * 保存设置到存储
+   * @param {Object} settings - 设置对象
+   * @returns {Promise<boolean>} 保存是否成功
+   */
+  async saveSettings(settings) {
+    try {
+      if (!settings || typeof settings !== "object") {
+        throw new Error("Settings must be an object");
+      }
+
+      // 验证设置数据结构
+      this.validateSettingsData(settings);
+
+      // 创建存储数据对象
+      const storageData = {
+        version: this.DATA_VERSION,
+        timestamp: Date.now(),
+        settings: settings,
+      };
+
+      // 序列化并保存
+      const serializedData = JSON.stringify(storageData);
+      GM_setValue(this.STORAGE_KEYS.SETTINGS, serializedData);
+
+      console.log("[StorageManager] Settings saved to storage");
+      return true;
+    } catch (error) {
+      console.error("[StorageManager] Failed to save settings:", error);
+      return false;
+    }
+  }
+
+  /**
+   * 从存储加载设置
+   * @returns {Promise<Object>} 设置对象
+   */
+  async loadSettings() {
+    try {
+      const serializedData = GM_getValue(this.STORAGE_KEYS.SETTINGS, null);
+
+      if (!serializedData) {
+        console.log(
+          "[StorageManager] No settings found in storage, returning defaults",
+        );
+        return { ...this.DEFAULT_SETTINGS };
+      }
+
+      // 解析存储数据
+      const storageData = JSON.parse(serializedData);
+
+      // 检查数据版本和格式（使用设置专用的验证器）
+      if (!this.validateSettingsStorageData(storageData)) {
+        console.warn(
+          "[StorageManager] Invalid settings storage data, returning defaults",
+        );
+        return { ...this.DEFAULT_SETTINGS };
+      }
+
+      // 合并默认设置和存储的设置（确保新增字段有默认值）
+      const settings = {
+        ...this.DEFAULT_SETTINGS,
+        ...storageData.settings,
+      };
+
+      // 验证设置数据结构
+      this.validateSettingsData(settings);
+
+      console.log("[StorageManager] Settings loaded from storage");
+      return settings;
+    } catch (error) {
+      console.error("[StorageManager] Failed to load settings:", error);
+      return { ...this.DEFAULT_SETTINGS };
+    }
+  }
+
+  /**
+   * 重置设置为默认值
+   * @returns {Promise<boolean>} 重置是否成功
+   */
+  async resetSettings() {
+    try {
+      const success = await this.saveSettings({ ...this.DEFAULT_SETTINGS });
+      if (success) {
+        console.log("[StorageManager] Settings reset to defaults");
+      }
+      return success;
+    } catch (error) {
+      console.error("[StorageManager] Failed to reset settings:", error);
+      return false;
+    }
+  }
+
+  /**
    * 获取存储统计信息
    * @returns {Object} 存储统计信息
    */
@@ -150,7 +249,7 @@ class StorageManager {
   }
 
   /**
-   * 验证存储数据结构
+   * 验证存储数据结构（用于任务数据）
    * @param {Object} storageData - 存储数据对象
    * @returns {boolean} 验证是否通过
    */
@@ -164,6 +263,27 @@ class StorageManager {
     }
 
     if (!Array.isArray(storageData.tasks)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * 验证设置存储数据结构
+   * @param {Object} storageData - 设置存储数据对象
+   * @returns {boolean} 验证是否通过
+   */
+  validateSettingsStorageData(storageData) {
+    if (!storageData || typeof storageData !== "object") {
+      return false;
+    }
+
+    if (typeof storageData.version !== "number" || storageData.version < 1) {
+      return false;
+    }
+
+    if (!storageData.settings || typeof storageData.settings !== "object") {
       return false;
     }
 
@@ -231,6 +351,51 @@ class StorageManager {
         (typeof task.completedAt !== "number" || task.completedAt <= 0)
       ) {
         throw new Error(`Task at index ${i} has invalid completedAt`);
+      }
+    }
+  }
+
+  /**
+   * 验证设置数据结构
+   * @param {Object} settings - 设置对象
+   * @throws {Error} 如果数据结构无效
+   */
+  validateSettingsData(settings) {
+    if (!settings || typeof settings !== "object") {
+      throw new Error("Settings must be an object");
+    }
+
+    // 验证必需字段
+    const requiredFields = ["pomodoroDuration", "whitelist"];
+    for (const field of requiredFields) {
+      if (!(field in settings)) {
+        throw new Error(`Settings is missing required field: ${field}`);
+      }
+    }
+
+    // 验证 pomodoroDuration
+    if (
+      typeof settings.pomodoroDuration !== "number" ||
+      settings.pomodoroDuration <= 0 ||
+      settings.pomodoroDuration > 120
+    ) {
+      throw new Error(
+        "Settings has invalid pomodoroDuration (must be number between 1-120)",
+      );
+    }
+
+    // 验证 whitelist
+    if (!Array.isArray(settings.whitelist)) {
+      throw new Error("Settings whitelist must be an array");
+    }
+
+    // 验证白名单中的每个域名
+    for (let i = 0; i < settings.whitelist.length; i++) {
+      const domain = settings.whitelist[i];
+      if (typeof domain !== "string" || domain.trim() === "") {
+        throw new Error(
+          `Whitelist domain at index ${i} must be a non-empty string`,
+        );
       }
     }
   }

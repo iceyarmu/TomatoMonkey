@@ -20,6 +20,12 @@ class SettingsPanel {
     this.contentArea = null;
     this.tabs = new Map(); // 存储标签页组件
 
+    // 白名单相关
+    this.whitelistManager = null;
+    this.whitelistElements = null;
+    this.undoToast = null;
+    this.undoTimeout = null;
+
     // 标签页配置
     this.tabConfig = [
       {
@@ -48,11 +54,12 @@ class SettingsPanel {
   /**
    * 初始化设置面板
    */
-  initialize() {
+  async initialize() {
     this.createPanelStructure();
     this.createNavigation();
     this.createContentArea();
     this.setupEventListeners();
+    await this.initializeWhitelist(); // 初始化白名单功能
     this.activateTab(this.activeTab);
 
     console.log("[SettingsPanel] Initialized successfully");
@@ -196,11 +203,42 @@ class SettingsPanel {
           contentPanel.innerHTML = `
                         <div class="panel-header">
                             <h3>网站白名单</h3>
-                            <p>设置允许使用番茄钟的网站</p>
+                            <p>设置专注期间允许访问的网站（使用包含匹配）</p>
                         </div>
-                        <div class="placeholder-content">
-                            <div class="placeholder-icon">🌐</div>
-                            <p>网站白名单功能即将上线</p>
+                        <div class="whitelist-container">
+                            <div class="whitelist-input-section">
+                                <div class="input-group">
+                                    <input 
+                                        type="text" 
+                                        id="whitelist-domain-input" 
+                                        class="domain-input" 
+                                        placeholder="输入域名，如：google.com"
+                                        aria-label="域名输入"
+                                    />
+                                    <button 
+                                        type="button" 
+                                        id="whitelist-add-button" 
+                                        class="add-domain-button"
+                                        aria-label="添加域名到白名单"
+                                    >
+                                        添加域名
+                                    </button>
+                                </div>
+                                <div class="input-feedback" id="whitelist-input-feedback" role="alert" aria-live="polite"></div>
+                            </div>
+                            <div class="whitelist-list-section">
+                                <div class="list-header">
+                                    <h4>已添加的域名</h4>
+                                    <span class="domain-count" id="whitelist-domain-count">0 个域名</span>
+                                </div>
+                                <div class="domain-list" id="whitelist-domain-list" role="list">
+                                    <div class="empty-state" id="whitelist-empty-state">
+                                        <div class="empty-icon">🌐</div>
+                                        <p>暂无白名单域名</p>
+                                        <small>添加域名后，专注期间将允许访问包含这些域名的网站</small>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     `;
           break;
@@ -411,6 +449,364 @@ class SettingsPanel {
   }
 
   /**
+   * 初始化白名单功能
+   */
+  async initializeWhitelist() {
+    try {
+      // 初始化 WhitelistManager（需要确保 WhitelistManager 和 StorageManager 已加载）
+      if (
+        typeof window.whitelistManager !== "undefined" &&
+        typeof window.storageManager !== "undefined"
+      ) {
+        this.whitelistManager = window.whitelistManager;
+        await this.whitelistManager.initialize(window.storageManager);
+
+        // 设置DOM元素引用
+        this.setupWhitelistElements();
+
+        // 绑定事件处理器
+        this.setupWhitelistEventListeners();
+
+        // 加载并显示现有域名
+        await this.refreshWhitelistUI();
+
+        console.log("[SettingsPanel] Whitelist initialized successfully");
+      } else {
+        console.warn(
+          "[SettingsPanel] WhitelistManager or StorageManager not available",
+        );
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to initialize whitelist:", error);
+    }
+  }
+
+  /**
+   * 设置白名单DOM元素引用
+   */
+  setupWhitelistElements() {
+    const whitelistPanel = this.tabs.get("whitelist");
+    if (!whitelistPanel) return;
+
+    this.whitelistElements = {
+      input: whitelistPanel.querySelector("#whitelist-domain-input"),
+      addButton: whitelistPanel.querySelector("#whitelist-add-button"),
+      feedback: whitelistPanel.querySelector("#whitelist-input-feedback"),
+      domainList: whitelistPanel.querySelector("#whitelist-domain-list"),
+      domainCount: whitelistPanel.querySelector("#whitelist-domain-count"),
+      emptyState: whitelistPanel.querySelector("#whitelist-empty-state"),
+    };
+  }
+
+  /**
+   * 设置白名单事件监听器
+   */
+  setupWhitelistEventListeners() {
+    if (!this.whitelistElements) return;
+
+    const { input, addButton } = this.whitelistElements;
+
+    // 添加域名按钮点击事件
+    addButton.addEventListener("click", () => this.handleAddDomain());
+
+    // 输入框回车事件
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        this.handleAddDomain();
+      }
+    });
+
+    // 输入实时验证
+    input.addEventListener("input", () => this.validateDomainInput());
+
+    // 监听白名单变更事件
+    document.addEventListener("tomato-monkey-whitelist-domainAdded", () =>
+      this.refreshWhitelistUI(),
+    );
+    document.addEventListener("tomato-monkey-whitelist-domainRemoved", () =>
+      this.refreshWhitelistUI(),
+    );
+    document.addEventListener("tomato-monkey-whitelist-domainsCleared", () =>
+      this.refreshWhitelistUI(),
+    );
+  }
+
+  /**
+   * 处理添加域名操作
+   */
+  async handleAddDomain() {
+    if (!this.whitelistManager || !this.whitelistElements) return;
+
+    const { input, addButton, feedback } = this.whitelistElements;
+    const domain = input.value.trim();
+
+    if (!domain) {
+      this.showFeedback("请输入域名", "error");
+      return;
+    }
+
+    // 禁用按钮防止重复提交
+    addButton.disabled = true;
+    addButton.classList.add("loading");
+
+    try {
+      const success = await this.whitelistManager.addDomain(domain);
+
+      if (success) {
+        input.value = "";
+        this.showFeedback("域名添加成功", "success");
+        input.focus();
+      } else {
+        this.showFeedback("域名格式无效或已存在", "error");
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to add domain:", error);
+      this.showFeedback("添加失败，请重试", "error");
+    } finally {
+      addButton.disabled = false;
+      addButton.classList.remove("loading");
+    }
+  }
+
+  /**
+   * 处理删除域名操作（带撤销确认）
+   */
+  async handleRemoveDomain(domain) {
+    if (!this.whitelistManager) return;
+
+    try {
+      const success = await this.whitelistManager.removeDomain(domain);
+
+      if (success) {
+        this.showUndoToast(domain);
+      } else {
+        this.showFeedback("删除失败，请重试", "error");
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to remove domain:", error);
+      this.showFeedback("删除失败，请重试", "error");
+    }
+  }
+
+  /**
+   * 显示撤销Toast
+   */
+  showUndoToast(deletedDomain) {
+    // 清除现有的撤销Toast和定时器
+    this.hideUndoToast();
+
+    // 创建Toast元素
+    this.undoToast = document.createElement("div");
+    this.undoToast.className = "undo-toast";
+    this.undoToast.setAttribute("role", "alert");
+    this.undoToast.setAttribute("aria-live", "polite");
+
+    this.undoToast.innerHTML = `
+      <div class="undo-toast-content">
+        <span class="undo-message">已删除域名: ${this.escapeHtml(deletedDomain)}</span>
+        <button type="button" class="undo-button" aria-label="撤销删除域名 ${this.escapeHtml(deletedDomain)}">
+          撤销
+        </button>
+        <button type="button" class="toast-close-button" aria-label="关闭撤销提示">
+          ✕
+        </button>
+      </div>
+      <div class="undo-progress" aria-hidden="true"></div>
+    `;
+
+    // 添加到页面
+    document.body.appendChild(this.undoToast);
+
+    // 绑定撤销按钮事件
+    const undoButton = this.undoToast.querySelector(".undo-button");
+    const closeButton = this.undoToast.querySelector(".toast-close-button");
+
+    undoButton.addEventListener("click", () =>
+      this.handleUndoDelete(deletedDomain),
+    );
+    closeButton.addEventListener("click", () => this.hideUndoToast());
+
+    // 键盘支持
+    this.undoToast.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        this.hideUndoToast();
+      }
+    });
+
+    // 聚焦到撤销按钮以便键盘导航
+    setTimeout(() => undoButton.focus(), 100);
+
+    // 显示动画
+    setTimeout(() => {
+      this.undoToast.classList.add("show");
+    }, 10);
+
+    // 5秒后自动隐藏
+    this.undoTimeout = setTimeout(() => {
+      this.hideUndoToast();
+    }, 5000);
+  }
+
+  /**
+   * 处理撤销删除操作
+   */
+  async handleUndoDelete(domain) {
+    if (!this.whitelistManager) return;
+
+    try {
+      const success = await this.whitelistManager.addDomain(domain);
+
+      if (success) {
+        this.showFeedback(`已恢复域名: ${domain}`, "success");
+        this.hideUndoToast();
+      } else {
+        this.showFeedback("恢复失败，请重试", "error");
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to undo delete:", error);
+      this.showFeedback("恢复失败，请重试", "error");
+    }
+  }
+
+  /**
+   * 隐藏撤销Toast
+   */
+  hideUndoToast() {
+    if (this.undoTimeout) {
+      clearTimeout(this.undoTimeout);
+      this.undoTimeout = null;
+    }
+
+    if (this.undoToast) {
+      this.undoToast.classList.remove("show");
+
+      setTimeout(() => {
+        if (this.undoToast && this.undoToast.parentNode) {
+          this.undoToast.parentNode.removeChild(this.undoToast);
+        }
+        this.undoToast = null;
+      }, 300);
+    }
+  }
+
+  /**
+   * 验证域名输入
+   */
+  validateDomainInput() {
+    if (!this.whitelistManager || !this.whitelistElements) return;
+
+    const { input } = this.whitelistElements;
+    const domain = input.value.trim();
+
+    if (!domain) {
+      this.showFeedback("", "");
+      return;
+    }
+
+    const cleanDomain = this.whitelistManager.validateAndCleanDomain(domain);
+    if (cleanDomain) {
+      this.showFeedback("域名格式有效", "success");
+    } else {
+      this.showFeedback("域名格式无效", "error");
+    }
+  }
+
+  /**
+   * 显示反馈信息
+   */
+  showFeedback(message, type = "") {
+    if (!this.whitelistElements) return;
+
+    const { feedback } = this.whitelistElements;
+    feedback.textContent = message;
+    feedback.className = `input-feedback ${type}`;
+
+    // 自动清除成功信息
+    if (type === "success") {
+      setTimeout(() => {
+        if (feedback.textContent === message) {
+          feedback.textContent = "";
+          feedback.className = "input-feedback";
+        }
+      }, 3000);
+    }
+  }
+
+  /**
+   * 刷新白名单UI显示
+   */
+  async refreshWhitelistUI() {
+    if (!this.whitelistManager || !this.whitelistElements) return;
+
+    try {
+      const domains = this.whitelistManager.getDomains();
+      const { domainList, domainCount, emptyState } = this.whitelistElements;
+
+      // 更新域名数量
+      domainCount.textContent = `${domains.length} 个域名`;
+
+      // 清空列表
+      domainList.innerHTML = "";
+
+      if (domains.length === 0) {
+        // 显示空状态
+        domainList.appendChild(emptyState);
+      } else {
+        // 显示域名列表
+        domains.forEach((domain) => {
+          const domainItem = this.createDomainItem(domain);
+          domainList.appendChild(domainItem);
+        });
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to refresh whitelist UI:", error);
+    }
+  }
+
+  /**
+   * 创建域名列表项
+   */
+  createDomainItem(domain) {
+    const item = document.createElement("div");
+    item.className = "domain-item";
+    item.setAttribute("role", "listitem");
+
+    item.innerHTML = `
+      <span class="domain-text">${this.escapeHtml(domain)}</span>
+      <div class="domain-actions">
+        <button 
+          type="button" 
+          class="remove-domain-button" 
+          data-domain="${this.escapeHtml(domain)}"
+          aria-label="删除域名 ${this.escapeHtml(domain)}"
+        >
+          删除
+        </button>
+      </div>
+    `;
+
+    // 绑定删除事件
+    const removeButton = item.querySelector(".remove-domain-button");
+    removeButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const domainToRemove = removeButton.dataset.domain;
+      this.handleRemoveDomain(domainToRemove);
+    });
+
+    return item;
+  }
+
+  /**
+   * HTML转义函数
+   */
+  escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  /**
    * 应用基础样式
    */
   applyBaseStyles() {
@@ -482,6 +878,9 @@ class SettingsPanel {
    * 销毁设置面板
    */
   destroy() {
+    // 清理撤销Toast
+    this.hideUndoToast();
+
     if (this.panel) {
       this.panel.remove();
     }

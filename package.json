@@ -44,7 +44,9 @@
       "html",
       "lcov"
     ],
-    "setupFilesAfterEnv": [],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
     "moduleFileExtensions": [
       "js"
     ],
