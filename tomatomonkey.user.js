@@ -1,17 +1,18 @@
 // ==UserScript==
 // @name         TomatoMonkey
 // @namespace    https://github.com/your-username/tomatomonkey
-// @version      1.0.0
-// @description  专注时间管理工具：番茄钟技术与任务管理的结合
+// @version      1.4.0
+// @description  专注时间管理工具：番茄钟技术与任务管理的结合，支持网站拦截功能
 // @author       TomatoMonkey Team
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_addValueChangeListener
 // @grant        GM_addStyle
 // @grant        GM_notification
 // @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
-// @run-at       document-end
+// @run-at       document-start
 // @updateURL    
 // @downloadURL  
 // ==/UserScript==
@@ -906,6 +907,617 @@ if (typeof window !== "undefined") {
 }
     
     /**
+     * BlockerManager - 网站拦截逻辑管理器
+     */
+    class BlockerManager {
+  constructor() {
+    // 单例模式
+    if (BlockerManager.instance) {
+      return BlockerManager.instance;
+    }
+    BlockerManager.instance = this;
+
+    // 拦截器状态
+    this.isActive = false;
+    this.isCurrentPageBlocked = false;
+
+    // 管理器引用
+    this.timerManager = null;
+    this.whitelistManager = null;
+    this.focusPage = null;
+    this.storageManager = null;
+
+    // 观察者回调绑定
+    this.boundTimerObserver = this.handleTimerEvent.bind(this);
+
+    // 初始化状态
+    this.initialized = false;
+
+    // 缓存机制
+    this.urlMatchCache = new Map();
+    this.cacheExpiryTime = 5 * 60 * 1000; // 5分钟缓存过期
+
+    console.log("[BlockerManager] Created");
+  }
+
+  /**
+   * 初始化拦截器管理器
+   * @param {TimerManager} timerManager - 计时器管理器实例
+   * @param {WhitelistManager} whitelistManager - 白名单管理器实例
+   * @param {FocusPage} focusPage - 专注页面组件实例
+   * @param {StorageManager} storageManager - 存储管理器实例
+   */
+  async initialize(timerManager, whitelistManager, focusPage, storageManager) {
+    if (this.initialized) {
+      return;
+    }
+
+    this.timerManager = timerManager;
+    this.whitelistManager = whitelistManager;
+    this.focusPage = focusPage;
+    this.storageManager = storageManager;
+
+    // 监听计时器状态变化
+    this.bindTimerManager();
+
+    // 检查当前页面是否需要拦截
+    await this.checkCurrentPageBlocking();
+
+    // 设置跨标签页状态同步监听
+    this.setupCrossTabSync();
+
+    this.initialized = true;
+    console.log("[BlockerManager] Initialized successfully");
+  }
+
+  /**
+   * 绑定计时器管理器事件
+   */
+  bindTimerManager() {
+    if (!this.timerManager) return;
+    this.timerManager.addObserver(this.boundTimerObserver);
+  }
+
+  /**
+   * 解绑计时器管理器事件
+   */
+  unbindTimerManager() {
+    if (!this.timerManager) return;
+    this.timerManager.removeObserver(this.boundTimerObserver);
+  }
+
+  /**
+   * 处理计时器事件
+   * @param {string} event - 事件类型
+   * @param {Object} data - 事件数据
+   */
+  handleTimerEvent(event, data) {
+    switch (event) {
+      case "timerStarted":
+        this.activateBlocking(true); // 新的计时器会话开始
+        break;
+      case "timerStopped":
+        this.deactivateBlocking();
+        break;
+      case "timerCompleted":
+        this.deactivateBlocking();
+        break;
+    }
+  }
+
+  /**
+   * 激活拦截器
+   * @param {boolean} newSession - 是否为新的计时器会话（默认false）
+   */
+  async activateBlocking(newSession = false) {
+    this.isActive = true;
+    console.log(`[BlockerManager] Blocking activated (newSession: ${newSession})`);
+
+    // 只有在新计时器会话开始时才清除临时跳过域名列表
+    if (newSession) {
+      this.temporarySkipDomains = new Set();
+      console.log("[BlockerManager] Temporary skip domains cleared for new session");
+    } else {
+      // 保持现有的临时跳过域名列表
+      if (!this.temporarySkipDomains) {
+        this.temporarySkipDomains = new Set();
+      }
+      console.log(`[BlockerManager] Maintaining temporary skip domains: ${Array.from(this.temporarySkipDomains).join(', ')}`);
+    }
+
+    // 检查当前页面是否需要拦截
+    await this.checkCurrentPageBlocking();
+
+    // 保存拦截器状态
+    this.saveBlockerState();
+  }
+
+  /**
+   * 停用拦截器
+   */
+  deactivateBlocking() {
+    const wasActive = this.isActive;
+    const wasCurrentPageBlocked = this.isCurrentPageBlocked;
+    const focusPageWasVisible = this.focusPage && this.focusPage.isPageVisible();
+    
+    this.isActive = false;
+    this.isCurrentPageBlocked = false;
+    console.log(`🛑 [DeactivateBlocking] Blocking deactivated - wasActive: ${wasActive}, wasCurrentPageBlocked: ${wasCurrentPageBlocked}`);
+
+    // 清除临时跳过域名列表（计时器会话结束）
+    if (this.temporarySkipDomains) {
+      const skipDomainsCount = this.temporarySkipDomains.size;
+      this.temporarySkipDomains.clear();
+      console.log(`🛑 [DeactivateBlocking] Cleared ${skipDomainsCount} temporary skip domains`);
+    }
+
+    // 隐藏专注页面
+    if (this.focusPage && focusPageWasVisible) {
+      this.focusPage.hide();
+      console.log(`🛑 [DeactivateBlocking] Focus page hidden`);
+    } else {
+      console.log(`🛑 [DeactivateBlocking] Focus page not visible or not available`);
+    }
+
+    // 保存拦截器状态
+    this.saveBlockerState();
+    console.log(`🛑 [DeactivateBlocking] Deactivation complete`);
+  }
+
+  /**
+   * 检查当前页面是否需要拦截
+   */
+  async checkCurrentPageBlocking() {
+    if (!this.isActive) {
+      this.isCurrentPageBlocked = false;
+      return;
+    }
+
+    const currentUrl = window.location.href;
+    const shouldBlock = await this.shouldBlockUrl(currentUrl);
+
+    if (shouldBlock && !this.isCurrentPageBlocked) {
+      this.blockCurrentPage();
+    } else if (!shouldBlock && this.isCurrentPageBlocked) {
+      this.unblockCurrentPage();
+    }
+  }
+
+  /**
+   * 拦截当前页面
+   */
+  blockCurrentPage() {
+    this.isCurrentPageBlocked = true;
+    console.log(`[BlockerManager] Blocking current page: ${window.location.href}`);
+
+    // 🚨 关键修复：直接调用FocusPage.show()绕过TimerManager同步缺陷
+    if (this.focusPage) {
+      // 确保FocusPage知道当前是拦截场景
+      this.setupBlockingContext();
+      this.focusPage.show();
+    }
+  }
+
+  /**
+   * 解除当前页面拦截
+   */
+  unblockCurrentPage() {
+    this.isCurrentPageBlocked = false;
+    console.log(`[BlockerManager] Unblocking current page: ${window.location.href}`);
+
+    if (this.focusPage && this.focusPage.isPageVisible()) {
+      this.focusPage.hide();
+    }
+  }
+
+  /**
+   * 设置拦截上下文信息
+   */
+  setupBlockingContext() {
+    // 向FocusPage传递拦截上下文（通过DOM属性）
+    if (this.focusPage && this.focusPage.container) {
+      this.focusPage.container.setAttribute('data-blocking-mode', 'true');
+      
+      // 更新状态文本为拦截提示
+      if (this.focusPage.statusElement) {
+        this.focusPage.statusElement.textContent = "网站已被拦截";
+        this.focusPage.statusElement.className = "focus-status blocked";
+      }
+
+      // 调整按钮显示（隐藏计时控制按钮）
+      this.adjustButtonsForBlockingMode();
+    }
+  }
+
+  /**
+   * 调整拦截模式下的按钮显示
+   */
+  adjustButtonsForBlockingMode() {
+    if (!this.focusPage || !this.focusPage.container) return;
+
+    const container = this.focusPage.container;
+    
+    // 防御性检查：确保container有必要的方法
+    if (typeof container.querySelectorAll !== 'function' || typeof container.querySelector !== 'function') {
+      console.warn("[BlockerManager] Container missing required DOM methods");
+      return;
+    }
+    
+    // 隐藏计时控制按钮
+    const timerButtons = container.querySelectorAll("#pause-btn, #resume-btn, #modify-time-btn, #stop-btn");
+    timerButtons.forEach(btn => btn.classList.add("hidden"));
+
+    // 隐藏完成和取消按钮
+    const completeBtn = container.querySelector("#complete-btn");
+    const cancelBtn = container.querySelector("#cancel-complete-btn");
+    
+    if (completeBtn) completeBtn.classList.add("hidden");
+    if (cancelBtn) cancelBtn.classList.add("hidden");
+    
+    // 显示跳过按钮和结束专注按钮
+    const skipBtn = container.querySelector("#skip-btn");
+    const endFocusBtn = container.querySelector("#end-focus-btn");
+    
+    if (skipBtn) skipBtn.classList.remove("hidden");
+    if (endFocusBtn) endFocusBtn.classList.remove("hidden");
+  }
+
+  /**
+   * 判断URL是否应该被拦截
+   * @param {string} url - 要检查的URL
+   * @returns {boolean} 是否应该拦截
+   */
+  async shouldBlockUrl(url) {
+    try {
+      // 如果拦截器未激活，不拦截任何页面
+      if (!this.isActive) {
+        return false;
+      }
+
+      // 检查缓存
+      const cacheKey = url;
+      const cached = this.urlMatchCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < this.cacheExpiryTime) {
+        return cached.shouldBlock;
+      }
+
+      // 特殊页面豁免
+      if (this.isExemptUrl(url)) {
+        this.urlMatchCache.set(cacheKey, {
+          shouldBlock: false,
+          timestamp: Date.now()
+        });
+        return false;
+      }
+
+      // 检查临时跳过的域名
+      if (this.temporarySkipDomains && this.temporarySkipDomains.size > 0) {
+        try {
+          const urlObj = new URL(url);
+          if (this.temporarySkipDomains.has(urlObj.hostname)) {
+            this.urlMatchCache.set(cacheKey, {
+              shouldBlock: false,
+              timestamp: Date.now()
+            });
+            return false;
+          }
+        } catch (error) {
+          console.warn("[BlockerManager] Invalid URL for skip domain check:", url);
+        }
+      }
+
+      // 检查白名单
+      const isAllowed = this.whitelistManager ? 
+        this.whitelistManager.isDomainAllowed(url) : false;
+
+      const shouldBlock = !isAllowed;
+
+      // 缓存结果
+      this.urlMatchCache.set(cacheKey, {
+        shouldBlock,
+        timestamp: Date.now()
+      });
+
+      return shouldBlock;
+
+    } catch (error) {
+      console.error("[BlockerManager] Error checking URL blocking:", error);
+      return false; // 出错时不拦截
+    }
+  }
+
+  /**
+   * 检查URL是否为豁免页面
+   * @param {string} url - 要检查的URL
+   * @returns {boolean} 是否为豁免页面
+   */
+  isExemptUrl(url) {
+    const protocolExemptPatterns = [
+      'about:',
+      'chrome://',
+      'chrome-extension://',
+      'moz-extension://',
+      'edge://',
+      'opera://',
+      'file://',
+      'data:',
+      'javascript:',
+      'blob:'
+    ];
+
+    const hostExemptPatterns = [
+      'localhost',
+      '127.0.0.1',
+      '0.0.0.0'
+    ];
+
+    const lowerUrl = url.toLowerCase();
+    
+    // 检查协议豁免
+    if (protocolExemptPatterns.some(pattern => lowerUrl.startsWith(pattern))) {
+      return true;
+    }
+
+    // 检查主机豁免
+    if (hostExemptPatterns.some(host => lowerUrl.includes(host))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * 保存拦截器状态
+   */
+  saveBlockerState() {
+    if (!this.storageManager) return;
+
+    const state = {
+      isActive: this.isActive,
+      timestamp: Date.now()
+    };
+
+    this.storageManager.setData("blockerState", state);
+  }
+
+  /**
+   * 恢复拦截器状态
+   */
+  async restoreBlockerState() {
+    if (!this.storageManager) return;
+
+    try {
+      const state = this.storageManager.getData("blockerState");
+      if (state && typeof state.isActive === 'boolean') {
+        this.isActive = state.isActive;
+        
+        if (this.isActive) {
+          await this.checkCurrentPageBlocking();
+        }
+        
+        console.log(`[BlockerManager] State restored: active=${this.isActive}`);
+      }
+    } catch (error) {
+      console.error("[BlockerManager] Failed to restore blocker state:", error);
+    }
+  }
+
+  /**
+   * 设置跨标签页状态同步
+   */
+  setupCrossTabSync() {
+    // 监听存储变化（如果支持GM_addValueChangeListener）
+    if (typeof GM_addValueChangeListener === 'function') {
+      console.log('🎧 [Listener] Setting up GM_addValueChangeListener for timerState');
+      GM_addValueChangeListener('timerState', (name, old_value, new_value, remote) => {
+        console.log(`🎧 [Listener] GM_addValueChangeListener triggered:`, {
+          name,
+          old_value,
+          new_value,
+          remote,
+          isRemote: remote
+        });
+        
+        if (remote) {
+          console.log('🎧 [Listener] Remote change detected, calling handleRemoteTimerStateChange');
+          this.handleRemoteTimerStateChange(new_value);
+        } else {
+          console.log('🎧 [Listener] Local change detected, ignoring');
+        }
+      });
+      console.log('🎧 [Listener] GM_addValueChangeListener setup complete');
+    } else {
+      console.warn('🎧 [Listener] GM_addValueChangeListener not available!');
+    }
+
+    // 备用方案：使用window事件
+    window.addEventListener('focus', () => {
+      this.handleWindowFocus();
+    });
+  }
+
+  /**
+   * 处理远程计时器状态变化
+   * @param {Object} newState - 新的计时器状态
+   */
+  async handleRemoteTimerStateChange(newState) {
+    try {
+      console.log('🔄 [RemoteStateChange] Received timer state change:', newState);
+      
+      if (newState && typeof newState === 'string') {
+        newState = JSON.parse(newState);
+        console.log('🔄 [RemoteStateChange] Parsed state:', newState);
+      }
+
+      if (newState && newState.status === 'running') {
+        console.log('🔄 [RemoteStateChange] Timer running - activating blocking');
+        // 远程计时器开始运行，激活本标签页的拦截器（非新会话）
+        if (!this.isActive) {
+          this.activateBlocking(false); // 跨标签页同步，保持临时跳过域名
+        } else {
+          // 已经激活，只需检查当前页面
+          await this.checkCurrentPageBlocking();
+        }
+      } else if (newState && (newState.status === 'idle' || newState.status === 'completed')) {
+        console.log(`🔄 [RemoteStateChange] Timer stopped (${newState.status}) - deactivating blocking`);
+        // 远程计时器停止，停用本标签页的拦截器
+        this.deactivateBlocking();
+      } else {
+        console.log('🔄 [RemoteStateChange] No action needed for state:', newState);
+      }
+    } catch (error) {
+      console.error("[BlockerManager] Error handling remote timer state change:", error);
+    }
+  }
+
+  /**
+   * 处理窗口获得焦点事件
+   */
+  async handleWindowFocus() {
+    // 当标签页获得焦点时，检查拦截状态
+    if (this.timerManager) {
+      const timerState = this.timerManager.getTimerState();
+      if (timerState.status === 'running' && !this.isActive) {
+        this.activateBlocking(false); // 窗口焦点激活，保持临时跳过域名
+      } else if (timerState.status !== 'running' && this.isActive) {
+        this.deactivateBlocking();
+      }
+    }
+  }
+
+  /**
+   * 清除URL匹配缓存
+   */
+  clearCache() {
+    this.urlMatchCache.clear();
+    console.log("[BlockerManager] URL match cache cleared");
+  }
+
+  /**
+   * 手动添加当前域名到白名单
+   */
+  async addCurrentDomainToWhitelist() {
+    if (!this.whitelistManager) {
+      console.warn("[BlockerManager] WhitelistManager not available");
+      return false;
+    }
+
+    try {
+      const currentDomain = window.location.hostname;
+      const success = await this.whitelistManager.addDomain(currentDomain);
+      
+      if (success) {
+        console.log(`[BlockerManager] Added ${currentDomain} to whitelist`);
+        
+        // 清除缓存并重新检查当前页面
+        this.clearCache();
+        await this.checkCurrentPageBlocking();
+        
+        return true;
+      } else {
+        console.warn(`[BlockerManager] Failed to add ${currentDomain} to whitelist`);
+        return false;
+      }
+    } catch (error) {
+      console.error("[BlockerManager] Error adding domain to whitelist:", error);
+      return false;
+    }
+  }
+
+  /**
+   * 处理跳过拦截功能
+   * @param {string} url - 可选的URL参数，如果未提供则使用当前页面URL
+   */
+  handleSkipBlocking(url) {
+    if (!this.isCurrentPageBlocked) {
+      console.warn("[BlockerManager] Current page is not blocked, skip ignored");
+      return;
+    }
+
+    // 使用提供的URL或当前页面URL
+    const targetUrl = url || window.location.href;
+    let currentDomain;
+    
+    try {
+      const urlObj = new URL(targetUrl);
+      currentDomain = urlObj.hostname;
+    } catch (error) {
+      console.warn("[BlockerManager] Invalid URL for skip blocking:", targetUrl);
+      currentDomain = window.location.hostname;
+    }
+    
+    console.log(`[BlockerManager] Skipping blocking for page: ${targetUrl}`);
+    
+    // 临时将当前域名添加到跳过列表 (仅当前计时器会话有效)
+    if (!this.temporarySkipDomains) {
+      this.temporarySkipDomains = new Set();
+    }
+    this.temporarySkipDomains.add(currentDomain);
+    
+    // 清除当前域名的缓存
+    const currentUrl = targetUrl;
+    this.urlMatchCache.delete(currentUrl);
+    
+    // 解除当前页面拦截
+    this.unblockCurrentPage();
+    
+    console.log(`[BlockerManager] Temporarily skipped blocking for domain: ${currentDomain}`);
+  }
+
+  /**
+   * 获取拦截器状态
+   * @returns {Object} 拦截器状态信息
+   */
+  getBlockerState() {
+    return {
+      isActive: this.isActive,
+      isCurrentPageBlocked: this.isCurrentPageBlocked,
+      currentUrl: window.location.href,
+      initialized: this.initialized,
+      cacheSize: this.urlMatchCache.size
+    };
+  }
+
+  /**
+   * 获取单例实例
+   * @returns {BlockerManager} 拦截器管理器实例
+   */
+  static getInstance() {
+    if (!BlockerManager.instance) {
+      BlockerManager.instance = new BlockerManager();
+    }
+    return BlockerManager.instance;
+  }
+
+  /**
+   * 销毁拦截器管理器
+   */
+  destroy() {
+    this.unbindTimerManager();
+    this.deactivateBlocking();
+    this.clearCache();
+    
+    this.timerManager = null;
+    this.whitelistManager = null;
+    this.focusPage = null;
+    this.storageManager = null;
+    
+    console.log("[BlockerManager] Destroyed");
+  }
+}
+
+// 创建单例实例
+const blockerManager = new BlockerManager();
+
+// 全局对象暴露
+if (typeof window !== "undefined") {
+  window.BlockerManager = BlockerManager;
+  window.blockerManager = blockerManager;
+}
+
+// 模块导出 (支持 CommonJS 和 ES6)
+    
+    /**
      * TaskManager - 任务管理器
      */
     /**
@@ -1506,12 +2118,14 @@ if (typeof window !== "undefined") {
 
     this.clearCountdown();
     this.resetTimer();
-    this.clearTimerState();
+    // 🚨 关键修复：保存idle状态到存储，而不是删除timerState
+    // 这样其他标签页的GM_addValueChangeListener能收到状态变化通知
+    this.saveTimerState();
     if (!donotNotify) {
       this.notifyObservers("timerStopped", {});
     }
 
-    console.log("[TimerManager] Timer stopped");
+    console.log("[TimerManager] Timer stopped, state saved as idle");
     return true;
   }
 
@@ -1631,7 +2245,9 @@ if (typeof window !== "undefined") {
     // 重置计时器状态
     setTimeout(() => {
       this.resetTimer();
-      this.clearTimerState();
+      // 🚨 关键修复：保存idle状态到存储，而不是删除timerState
+      // 这样其他标签页的GM_addValueChangeListener能收到状态变化通知
+      this.saveTimerState();
     }, 1000); // 给UI足够时间处理完成事件
 
     console.log(`[TimerManager] Timer completed for task: ${this.taskTitle}`);
@@ -3512,6 +4128,9 @@ if (typeof window !== "undefined") {
           <div class="focus-status" id="focus-status">
             就绪
           </div>
+          <div class="focus-settings-icon" id="focus-settings-icon" title="打开设置面板">
+            ⚙️
+          </div>
         </div>
         
         <div class="focus-timer">
@@ -3552,6 +4171,16 @@ if (typeof window !== "undefined") {
           </button>
           <button type="button" class="focus-action-btn extend-time-btn hidden" id="extend-time-btn">
             ⏰ 增加时间
+          </button>
+          
+          <!-- 拦截模式下的跳过按钮 -->
+          <button type="button" class="focus-action-btn skip-btn hidden" id="skip-btn">
+            ⏭️ 跳过拦截
+          </button>
+          
+          <!-- 拦截模式下的结束专注按钮 -->
+          <button type="button" class="focus-action-btn end-focus-btn hidden" id="end-focus-btn">
+            🛑 结束专注
           </button>
         </div>
       </div>
@@ -3674,11 +4303,32 @@ if (typeof window !== "undefined") {
       extendTimeBtn.addEventListener("click", () => this.handleExtendTime());
     }
 
+    // 跳过拦截按钮
+    const skipBtn = this.container.querySelector("#skip-btn");
+    if (skipBtn) {
+      skipBtn.addEventListener("click", () => this.handleSkipBlocking());
+    }
+
+    // 结束专注按钮
+    const endFocusBtn = this.container.querySelector("#end-focus-btn");
+    if (endFocusBtn) {
+      endFocusBtn.addEventListener("click", () => this.handleEndFocus());
+    }
+
     // 时间修改模态框事件
     this.setupModalEventListeners();
 
     // 增加时间模态框事件
     this.setupExtendTimeModalEventListeners();
+
+    // 设置图标点击事件
+    const settingsIcon = this.container.querySelector("#focus-settings-icon");
+    if (settingsIcon) {
+      settingsIcon.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.handleSettingsIconClick();
+      });
+    }
 
     // 点击遮罩层不做任何操作（避免意外关闭）
     this.container.querySelector(".focus-page-overlay").addEventListener("click", (e) => {
@@ -3707,6 +4357,81 @@ if (typeof window !== "undefined") {
     const confirmed = confirm("确定要结束当前的专注时间吗？\n\n这将停止计时器并返回任务列表。");
     if (confirmed && this.timerManager) {
       this.timerManager.stopTimer();
+    }
+  }
+
+  /**
+   * 处理设置图标点击事件
+   */
+  handleSettingsIconClick() {
+    // 通过全局应用实例访问设置面板
+    if (typeof window !== "undefined") {
+      // 尝试通过 unsafeWindow 访问（Tampermonkey环境）
+      const app = window.unsafeWindow?.TomatoMonkeyApp || window.TomatoMonkeyApp;
+      
+      if (app && app.settingsPanel) {
+        app.settingsPanel.show();
+        console.log("[FocusPage] Settings panel opened via settings icon");
+      } else {
+        console.warn("[FocusPage] Could not access settings panel");
+        // 降级方案：显示提示消息
+        alert("设置面板暂不可用，请使用快捷键 Ctrl+Shift+T 或右上角番茄钟按钮打开设置。");
+      }
+    }
+  }
+
+  /**
+   * 处理结束专注按钮点击事件 (拦截模式下)
+   */
+  handleEndFocus() {
+    const confirmed = confirm(
+      "确定要结束当前的专注时间吗？\n\n" +
+      "这将停止计时器并结束拦截，让您正常浏览网站。"
+    );
+    
+    if (confirmed && this.timerManager) {
+      console.log("[FocusPage] User confirmed end focus from blocking mode");
+      this.timerManager.stopTimer();
+    }
+  }
+
+  /**
+   * 处理跳过拦截按钮点击事件
+   */
+  handleSkipBlocking() {
+    // 显示确认对话框
+    const confirmed = confirm(
+      "确定要跳过拦截直接进入此网站吗？\n\n" +
+      "⚠️ 这可能会影响您的专注效果。\n" +
+      "计时器将继续运行，但此页面不会再被拦截。"
+    );
+    
+    if (confirmed) {
+      console.log("[FocusPage] User confirmed skip blocking");
+      
+      // 隐藏 focus-page，但不影响计时器状态
+      this.hide();
+      
+      // 通知 BlockerManager 用户选择跳过当前页面
+      this.notifySkipBlocking();
+    } else {
+      console.log("[FocusPage] User cancelled skip blocking");
+    }
+  }
+
+  /**
+   * 通知 BlockerManager 用户选择跳过拦截
+   */
+  notifySkipBlocking() {
+    // 通过全局访问 BlockerManager
+    if (typeof window !== "undefined") {
+      const blockerManager = window.unsafeWindow?.blockerManager || window.blockerManager;
+      
+      if (blockerManager && typeof blockerManager.handleSkipBlocking === 'function') {
+        blockerManager.handleSkipBlocking(window.location.href);
+      } else {
+        console.warn("[FocusPage] Could not notify BlockerManager of skip action");
+      }
     }
   }
 
@@ -4432,6 +5157,9 @@ if (typeof window !== "undefined") {
             try {
                 console.log('[TomatoMonkey] Initializing application...');
                 
+                // 🚨 早期拦截检查 (document-start phase)
+                await this.earlyInterceptionCheck();
+                
                 // 等待DOM加载完成
                 if (document.readyState === 'loading') {
                     await new Promise(resolve => {
@@ -4460,6 +5188,86 @@ if (typeof window !== "undefined") {
             } catch (error) {
                 console.error('[TomatoMonkey] Failed to initialize application:', error);
             }
+        }
+
+        /**
+         * 早期拦截检查 (在document-start阶段执行)
+         */
+        async earlyInterceptionCheck() {
+            const currentUrl = window.location.href;
+            console.log('[EarlyCheck] Starting early interception check for URL:', currentUrl);
+            
+            // 快速初始化存储管理器
+            const tempStorageManager = new StorageManager();
+            
+            // 添加小延迟以允许跨标签页状态更新传播
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // 检查计时器状态
+            let timerState = tempStorageManager.getData("timerState");
+            console.log('[EarlyCheck] Retrieved timerState (first read):', timerState);
+            
+            // 双重检查：如果状态可能过时，再次读取
+            if (timerState && timerState.timestamp) {
+                const stateAge = Date.now() - timerState.timestamp;
+                if (stateAge > 1000) { // 如果状态超过1秒钟
+                    console.log('[EarlyCheck] State seems old (' + stateAge + 'ms), re-reading...');
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    timerState = tempStorageManager.getData("timerState");
+                    console.log('[EarlyCheck] Retrieved timerState (second read):', timerState);
+                }
+            }
+            
+            // 额外检查：查看拦截器状态
+            const blockerState = tempStorageManager.getData("blockerState");
+            console.log('[EarlyCheck] Retrieved blockerState:', blockerState);
+            
+            // 如果拦截器明确标记为非活动状态，不应该拦截
+            if (blockerState && blockerState.isActive === false) {
+                console.log('[EarlyCheck] PASS DECISION: BlockerState indicates blocking is inactive');
+                return;
+            }
+            
+            if (timerState && timerState.status === 'running') {
+                console.log('[EarlyCheck] Timer is running, checking whitelist for URL:', currentUrl);
+                
+                // 快速初始化白名单管理器
+                const tempWhitelistManager = new WhitelistManager();
+                await tempWhitelistManager.initialize(tempStorageManager);
+                
+                // 检查当前URL是否需要拦截
+                const shouldBlock = !tempWhitelistManager.isDomainAllowed(currentUrl);
+                console.log('[EarlyCheck] Whitelist check result - shouldBlock:', shouldBlock);
+                
+                const isExempt = this.isExemptUrl(currentUrl);
+                console.log('[EarlyCheck] URL exemption check - isExempt:', isExempt);
+                
+                if (shouldBlock && !isExempt) {
+                    console.log('[EarlyCheck] BLOCKING DECISION: Page will be blocked');
+                    console.log('[EarlyCheck] Timer status:', timerState.status, 'shouldBlock:', shouldBlock, 'isExempt:', isExempt);
+                    // 标记需要拦截，等待完全初始化后显示拦截界面
+                    this.pendingBlocking = true;
+                } else {
+                    console.log('[EarlyCheck] PASS DECISION: Page will NOT be blocked');
+                    console.log('[EarlyCheck] Reason - shouldBlock:', shouldBlock, 'isExempt:', isExempt);
+                }
+            } else {
+                const status = timerState ? timerState.status : 'no-timer-state';
+                console.log('[EarlyCheck] PASS DECISION: Timer not running (status: ' + status + '), page will NOT be blocked');
+            }
+        }
+
+        /**
+         * 检查URL是否为豁免页面
+         */
+        isExemptUrl(url) {
+            const exemptPatterns = [
+                'about:', 'chrome://', 'chrome-extension://', 'moz-extension://',
+                'edge://', 'opera://', 'file://', 'data:', 'javascript:', 'blob:',
+                'localhost', '127.0.0.1', '0.0.0.0'
+            ];
+            const lowerUrl = url.toLowerCase();
+            return exemptPatterns.some(pattern => lowerUrl.startsWith(pattern));
         }
 
         /**
@@ -5542,6 +6350,7 @@ border: 1px solid rgba(255, 255, 255, 0.3);
 }
 .focus-header {
 margin-bottom: 40px;
+position: relative;
 }
 .focus-task-title {
 font-size: 24px;
@@ -5567,6 +6376,33 @@ color: #FF9800;
 }
 .focus-status.completed {
 color: #70A85C;
+}
+.focus-status.blocked {
+color: #D95550;
+font-weight: 600;
+}
+.focus-settings-icon {
+position: absolute;
+top: 0;
+right: 0;
+font-size: 20px;
+color: #BBBBBB;
+cursor: pointer;
+padding: 8px;
+border-radius: 50%;
+transition: all 0.2s ease;
+user-select: none;
+-webkit-user-select: none;
+-moz-user-select: none;
+-ms-user-select: none;
+}
+.focus-settings-icon:hover {
+color: #D95550;
+background-color: rgba(217, 85, 80, 0.1);
+transform: scale(1.1);
+}
+.focus-settings-icon:active {
+transform: scale(0.95);
 }
 .focus-timer {
 margin-bottom: 40px;
@@ -5644,6 +6480,42 @@ box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
 .focus-action-btn:active {
 transform: translateY(0);
 box-shadow: 0 2px 6px rgba(217, 85, 80, 0.3);
+}
+.focus-action-btn.skip-btn {
+background: #FF9800;
+color: white;
+border: 2px solid #FF9800;
+}
+.focus-action-btn.skip-btn:hover {
+background: #F57C00;
+border-color: #F57C00;
+color: white;
+transform: translateY(-2px);
+box-shadow: 0 6px 16px rgba(255, 152, 0, 0.4);
+}
+.focus-action-btn.skip-btn:active {
+background: #E65100;
+border-color: #E65100;
+transform: translateY(0);
+box-shadow: 0 3px 8px rgba(255, 152, 0, 0.4);
+}
+.focus-action-btn.end-focus-btn {
+background: #F44336;
+color: white;
+border: 2px solid #F44336;
+}
+.focus-action-btn.end-focus-btn:hover {
+background: #D32F2F;
+border-color: #D32F2F;
+color: white;
+transform: translateY(-2px);
+box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4);
+}
+.focus-action-btn.end-focus-btn:active {
+background: #B71C1C;
+border-color: #B71C1C;
+transform: translateY(0);
+box-shadow: 0 3px 8px rgba(244, 67, 54, 0.4);
 }
 .pause-btn {
 border-color: #FF9800;
@@ -6075,6 +6947,10 @@ background: rgba(60, 60, 60, 0.8);
             // 初始化存储管理器
             this.storageManager = new StorageManager();
             
+            // 初始化白名单管理器
+            this.whitelistManager = new WhitelistManager();
+            await this.whitelistManager.initialize(this.storageManager);
+            
             // 初始化任务管理器
             this.taskManager = TaskManager.getInstance();
             await this.taskManager.initialize(this.storageManager);
@@ -6086,6 +6962,16 @@ background: rgba(60, 60, 60, 0.8);
             // 初始化专注页面
             this.focusPage = new FocusPage();
             this.focusPage.initialize(this.timerManager, this.taskManager);
+            
+            // 初始化拦截器管理器
+            this.blockerManager = BlockerManager.getInstance();
+            await this.blockerManager.initialize(this.timerManager, this.whitelistManager, this.focusPage, this.storageManager);
+            
+            // 处理早期拦截检查的结果
+            if (this.pendingBlocking) {
+                console.log('[TomatoMonkey] Applying pending blocking from early interception check');
+                this.blockerManager.activateBlocking();
+            }
             
             console.log('[TomatoMonkey] Core modules initialized');
         }

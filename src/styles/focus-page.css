@@ -63,6 +63,7 @@
 /* ========== 头部区域 ========== */
 .focus-header {
   margin-bottom: 40px;
+  position: relative;
 }
 
 .focus-task-title {
@@ -93,6 +94,38 @@
 
 .focus-status.completed {
   color: #70A85C;
+}
+
+.focus-status.blocked {
+  color: #D95550;
+  font-weight: 600;
+}
+
+/* 设置图标样式 */
+.focus-settings-icon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 20px;
+  color: #BBBBBB;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.focus-settings-icon:hover {
+  color: #D95550;
+  background-color: rgba(217, 85, 80, 0.1);
+  transform: scale(1.1);
+}
+
+.focus-settings-icon:active {
+  transform: scale(0.95);
 }
 
 /* ========== 计时器区域 ========== */
@@ -185,6 +218,50 @@
 .focus-action-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 6px rgba(217, 85, 80, 0.3);
+}
+
+/* 跳过拦截按钮样式 */
+.focus-action-btn.skip-btn {
+  background: #FF9800;
+  color: white;
+  border: 2px solid #FF9800;
+}
+
+.focus-action-btn.skip-btn:hover {
+  background: #F57C00;
+  border-color: #F57C00;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(255, 152, 0, 0.4);
+}
+
+.focus-action-btn.skip-btn:active {
+  background: #E65100;
+  border-color: #E65100;
+  transform: translateY(0);
+  box-shadow: 0 3px 8px rgba(255, 152, 0, 0.4);
+}
+
+/* 结束专注按钮样式 */
+.focus-action-btn.end-focus-btn {
+  background: #F44336;
+  color: white;
+  border: 2px solid #F44336;
+}
+
+.focus-action-btn.end-focus-btn:hover {
+  background: #D32F2F;
+  border-color: #D32F2F;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4);
+}
+
+.focus-action-btn.end-focus-btn:active {
+  background: #B71C1C;
+  border-color: #B71C1C;
+  transform: translateY(0);
+  box-shadow: 0 3px 8px rgba(244, 67, 54, 0.4);
 }
 
 .pause-btn {

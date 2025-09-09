@@ -69,6 +69,9 @@ class FocusPage {
           <div class="focus-status" id="focus-status">
             就绪
           </div>
+          <div class="focus-settings-icon" id="focus-settings-icon" title="打开设置面板">
+            ⚙️
+          </div>
         </div>
         
         <div class="focus-timer">
@@ -109,6 +112,16 @@ class FocusPage {
           </button>
           <button type="button" class="focus-action-btn extend-time-btn hidden" id="extend-time-btn">
             ⏰ 增加时间
+          </button>
+          
+          <!-- 拦截模式下的跳过按钮 -->
+          <button type="button" class="focus-action-btn skip-btn hidden" id="skip-btn">
+            ⏭️ 跳过拦截
+          </button>
+          
+          <!-- 拦截模式下的结束专注按钮 -->
+          <button type="button" class="focus-action-btn end-focus-btn hidden" id="end-focus-btn">
+            🛑 结束专注
           </button>
         </div>
       </div>
@@ -231,11 +244,32 @@ class FocusPage {
       extendTimeBtn.addEventListener("click", () => this.handleExtendTime());
     }
 
+    // 跳过拦截按钮
+    const skipBtn = this.container.querySelector("#skip-btn");
+    if (skipBtn) {
+      skipBtn.addEventListener("click", () => this.handleSkipBlocking());
+    }
+
+    // 结束专注按钮
+    const endFocusBtn = this.container.querySelector("#end-focus-btn");
+    if (endFocusBtn) {
+      endFocusBtn.addEventListener("click", () => this.handleEndFocus());
+    }
+
     // 时间修改模态框事件
     this.setupModalEventListeners();
 
     // 增加时间模态框事件
     this.setupExtendTimeModalEventListeners();
+
+    // 设置图标点击事件
+    const settingsIcon = this.container.querySelector("#focus-settings-icon");
+    if (settingsIcon) {
+      settingsIcon.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.handleSettingsIconClick();
+      });
+    }
 
     // 点击遮罩层不做任何操作（避免意外关闭）
     this.container.querySelector(".focus-page-overlay").addEventListener("click", (e) => {
@@ -264,6 +298,81 @@ class FocusPage {
     const confirmed = confirm("确定要结束当前的专注时间吗？\n\n这将停止计时器并返回任务列表。");
     if (confirmed && this.timerManager) {
       this.timerManager.stopTimer();
+    }
+  }
+
+  /**
+   * 处理设置图标点击事件
+   */
+  handleSettingsIconClick() {
+    // 通过全局应用实例访问设置面板
+    if (typeof window !== "undefined") {
+      // 尝试通过 unsafeWindow 访问（Tampermonkey环境）
+      const app = window.unsafeWindow?.TomatoMonkeyApp || window.TomatoMonkeyApp;
+      
+      if (app && app.settingsPanel) {
+        app.settingsPanel.show();
+        console.log("[FocusPage] Settings panel opened via settings icon");
+      } else {
+        console.warn("[FocusPage] Could not access settings panel");
+        // 降级方案：显示提示消息
+        alert("设置面板暂不可用，请使用快捷键 Ctrl+Shift+T 或右上角番茄钟按钮打开设置。");
+      }
+    }
+  }
+
+  /**
+   * 处理结束专注按钮点击事件 (拦截模式下)
+   */
+  handleEndFocus() {
+    const confirmed = confirm(
+      "确定要结束当前的专注时间吗？\n\n" +
+      "这将停止计时器并结束拦截，让您正常浏览网站。"
+    );
+    
+    if (confirmed && this.timerManager) {
+      console.log("[FocusPage] User confirmed end focus from blocking mode");
+      this.timerManager.stopTimer();
+    }
+  }
+
+  /**
+   * 处理跳过拦截按钮点击事件
+   */
+  handleSkipBlocking() {
+    // 显示确认对话框
+    const confirmed = confirm(
+      "确定要跳过拦截直接进入此网站吗？\n\n" +
+      "⚠️ 这可能会影响您的专注效果。\n" +
+      "计时器将继续运行，但此页面不会再被拦截。"
+    );
+    
+    if (confirmed) {
+      console.log("[FocusPage] User confirmed skip blocking");
+      
+      // 隐藏 focus-page，但不影响计时器状态
+      this.hide();
+      
+      // 通知 BlockerManager 用户选择跳过当前页面
+      this.notifySkipBlocking();
+    } else {
+      console.log("[FocusPage] User cancelled skip blocking");
+    }
+  }
+
+  /**
+   * 通知 BlockerManager 用户选择跳过拦截
+   */
+  notifySkipBlocking() {
+    // 通过全局访问 BlockerManager
+    if (typeof window !== "undefined") {
+      const blockerManager = window.unsafeWindow?.blockerManager || window.blockerManager;
+      
+      if (blockerManager && typeof blockerManager.handleSkipBlocking === 'function') {
+        blockerManager.handleSkipBlocking(window.location.href);
+      } else {
+        console.warn("[FocusPage] Could not notify BlockerManager of skip action");
+      }
     }
   }
 

@@ -17,17 +17,18 @@ const OUTPUT_FILE = path.join(ROOT_DIR, 'tomatomonkey.user.js');
 const METADATA_BLOCK = `// ==UserScript==
 // @name         TomatoMonkey
 // @namespace    https://github.com/your-username/tomatomonkey
-// @version      1.0.0
-// @description  专注时间管理工具：番茄钟技术与任务管理的结合
+// @version      1.4.0
+// @description  专注时间管理工具：番茄钟技术与任务管理的结合，支持网站拦截功能
 // @author       TomatoMonkey Team
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_addValueChangeListener
 // @grant        GM_addStyle
 // @grant        GM_notification
 // @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
-// @run-at       document-end
+// @run-at       document-start
 // @updateURL    
 // @downloadURL  
 // ==/UserScript==`;
@@ -99,6 +100,7 @@ function build() {
         // Read source files
         const storageManager = readFile(path.join(SRC_DIR, 'core', 'storage-manager.js'));
         const whitelistManager = readFile(path.join(SRC_DIR, 'core', 'whitelist-manager.js'));
+        const blockerManager = readFile(path.join(SRC_DIR, 'core', 'blocker-manager.js'));
         const taskManager = readFile(path.join(SRC_DIR, 'core', 'task-manager.js'));
         const timerManager = readFile(path.join(SRC_DIR, 'core', 'timer-manager.js'));
         const settingsPanel = readFile(path.join(SRC_DIR, 'components', 'settings-panel.js'));
@@ -110,6 +112,7 @@ function build() {
         // Extract module content
         const storageManagerContent = extractModuleContent(storageManager, 'StorageManager');
         const whitelistManagerContent = extractModuleContent(whitelistManager, 'WhitelistManager');
+        const blockerManagerContent = extractModuleContent(blockerManager, 'BlockerManager');
         const taskManagerContent = extractModuleContent(taskManager, 'TaskManager');
         const timerManagerContent = extractModuleContent(timerManager, 'TimerManager');
         const settingsPanelContent = extractModuleContent(settingsPanel, 'SettingsPanel');
@@ -150,6 +153,11 @@ function build() {
      * WhitelistManager - 网站白名单管理器
      */
     ${whitelistManagerContent}
+    
+    /**
+     * BlockerManager - 网站拦截逻辑管理器
+     */
+    ${blockerManagerContent}
     
     /**
      * TaskManager - 任务管理器
@@ -198,6 +206,9 @@ function build() {
             try {
                 console.log('[TomatoMonkey] Initializing application...');
                 
+                // 🚨 早期拦截检查 (document-start phase)
+                await this.earlyInterceptionCheck();
+                
                 // 等待DOM加载完成
                 if (document.readyState === 'loading') {
                     await new Promise(resolve => {
@@ -229,6 +240,86 @@ function build() {
         }
 
         /**
+         * 早期拦截检查 (在document-start阶段执行)
+         */
+        async earlyInterceptionCheck() {
+            const currentUrl = window.location.href;
+            console.log('[EarlyCheck] Starting early interception check for URL:', currentUrl);
+            
+            // 快速初始化存储管理器
+            const tempStorageManager = new StorageManager();
+            
+            // 添加小延迟以允许跨标签页状态更新传播
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // 检查计时器状态
+            let timerState = tempStorageManager.getData("timerState");
+            console.log('[EarlyCheck] Retrieved timerState (first read):', timerState);
+            
+            // 双重检查：如果状态可能过时，再次读取
+            if (timerState && timerState.timestamp) {
+                const stateAge = Date.now() - timerState.timestamp;
+                if (stateAge > 1000) { // 如果状态超过1秒钟
+                    console.log('[EarlyCheck] State seems old (' + stateAge + 'ms), re-reading...');
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    timerState = tempStorageManager.getData("timerState");
+                    console.log('[EarlyCheck] Retrieved timerState (second read):', timerState);
+                }
+            }
+            
+            // 额外检查：查看拦截器状态
+            const blockerState = tempStorageManager.getData("blockerState");
+            console.log('[EarlyCheck] Retrieved blockerState:', blockerState);
+            
+            // 如果拦截器明确标记为非活动状态，不应该拦截
+            if (blockerState && blockerState.isActive === false) {
+                console.log('[EarlyCheck] PASS DECISION: BlockerState indicates blocking is inactive');
+                return;
+            }
+            
+            if (timerState && timerState.status === 'running') {
+                console.log('[EarlyCheck] Timer is running, checking whitelist for URL:', currentUrl);
+                
+                // 快速初始化白名单管理器
+                const tempWhitelistManager = new WhitelistManager();
+                await tempWhitelistManager.initialize(tempStorageManager);
+                
+                // 检查当前URL是否需要拦截
+                const shouldBlock = !tempWhitelistManager.isDomainAllowed(currentUrl);
+                console.log('[EarlyCheck] Whitelist check result - shouldBlock:', shouldBlock);
+                
+                const isExempt = this.isExemptUrl(currentUrl);
+                console.log('[EarlyCheck] URL exemption check - isExempt:', isExempt);
+                
+                if (shouldBlock && !isExempt) {
+                    console.log('[EarlyCheck] BLOCKING DECISION: Page will be blocked');
+                    console.log('[EarlyCheck] Timer status:', timerState.status, 'shouldBlock:', shouldBlock, 'isExempt:', isExempt);
+                    // 标记需要拦截，等待完全初始化后显示拦截界面
+                    this.pendingBlocking = true;
+                } else {
+                    console.log('[EarlyCheck] PASS DECISION: Page will NOT be blocked');
+                    console.log('[EarlyCheck] Reason - shouldBlock:', shouldBlock, 'isExempt:', isExempt);
+                }
+            } else {
+                const status = timerState ? timerState.status : 'no-timer-state';
+                console.log('[EarlyCheck] PASS DECISION: Timer not running (status: ' + status + '), page will NOT be blocked');
+            }
+        }
+
+        /**
+         * 检查URL是否为豁免页面
+         */
+        isExemptUrl(url) {
+            const exemptPatterns = [
+                'about:', 'chrome://', 'chrome-extension://', 'moz-extension://',
+                'edge://', 'opera://', 'file://', 'data:', 'javascript:', 'blob:',
+                'localhost', '127.0.0.1', '0.0.0.0'
+            ];
+            const lowerUrl = url.toLowerCase();
+            return exemptPatterns.some(pattern => lowerUrl.startsWith(pattern));
+        }
+
+        /**
          * 加载CSS样式
          */
         loadStyles() {
@@ -243,6 +334,10 @@ function build() {
             // 初始化存储管理器
             this.storageManager = new StorageManager();
             
+            // 初始化白名单管理器
+            this.whitelistManager = new WhitelistManager();
+            await this.whitelistManager.initialize(this.storageManager);
+            
             // 初始化任务管理器
             this.taskManager = TaskManager.getInstance();
             await this.taskManager.initialize(this.storageManager);
@@ -254,6 +349,16 @@ function build() {
             // 初始化专注页面
             this.focusPage = new FocusPage();
             this.focusPage.initialize(this.timerManager, this.taskManager);
+            
+            // 初始化拦截器管理器
+            this.blockerManager = BlockerManager.getInstance();
+            await this.blockerManager.initialize(this.timerManager, this.whitelistManager, this.focusPage, this.storageManager);
+            
+            // 处理早期拦截检查的结果
+            if (this.pendingBlocking) {
+                console.log('[TomatoMonkey] Applying pending blocking from early interception check');
+                this.blockerManager.activateBlocking();
+            }
             
             console.log('[TomatoMonkey] Core modules initialized');
         }

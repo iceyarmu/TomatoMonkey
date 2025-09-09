@@ -209,12 +209,14 @@ class TimerManager {
 
     this.clearCountdown();
     this.resetTimer();
-    this.clearTimerState();
+    // 🚨 关键修复：保存idle状态到存储，而不是删除timerState
+    // 这样其他标签页的GM_addValueChangeListener能收到状态变化通知
+    this.saveTimerState();
     if (!donotNotify) {
       this.notifyObservers("timerStopped", {});
     }
 
-    console.log("[TimerManager] Timer stopped");
+    console.log("[TimerManager] Timer stopped, state saved as idle");
     return true;
   }
 
@@ -334,7 +336,9 @@ class TimerManager {
     // 重置计时器状态
     setTimeout(() => {
       this.resetTimer();
-      this.clearTimerState();
+      // 🚨 关键修复：保存idle状态到存储，而不是删除timerState
+      // 这样其他标签页的GM_addValueChangeListener能收到状态变化通知
+      this.saveTimerState();
     }, 1000); // 给UI足够时间处理完成事件
 
     console.log(`[TimerManager] Timer completed for task: ${this.taskTitle}`);
