@@ -17,894 +17,10 @@
 // @downloadURL  
 // ==/UserScript==
 
-/**
- * TomatoMonkey - 专注时间管理工具
- * 
- * 主入口文件，负责：
- * 1. 初始化脚本环境
- * 2. 加载核心模块
- * 3. 启动应用程序
- */
-
 (function() {
     'use strict';
 
     // ========== 核心模块 ==========
-    
-    /**
-     * StorageManager - 数据持久化管理器
-     */
-    /**
- * 存储管理器类
- */
-class StorageManager {
-  constructor() {
-    // 存储键值常量
-    this.STORAGE_KEYS = {
-      TASKS: "TOMATO_MONKEY_TASKS",
-      SETTINGS: "TOMATO_MONKEY_SETTINGS",
-      STATISTICS: "TOMATO_MONKEY_STATISTICS",
-    };
-
-    // 数据版本管理
-    this.DATA_VERSION = 1;
-
-    // 默认设置
-    this.DEFAULT_SETTINGS = {
-      pomodoroDuration: 25, // 默认番茄钟时长（分钟）
-      whitelist: [], // 默认空白名单
-    };
-  }
-
-  /**
-   * 保存任务列表到存储
-   * @param {Array<Task>} tasks - 任务列表
-   * @returns {Promise<boolean>} 保存是否成功
-   */
-  async saveTasks(tasks) {
-    try {
-      if (!Array.isArray(tasks)) {
-        throw new Error("Tasks must be an array");
-      }
-
-      // 验证任务数据结构
-      this.validateTasksData(tasks);
-
-      // 创建存储数据对象
-      const storageData = {
-        version: this.DATA_VERSION,
-        timestamp: Date.now(),
-        tasks: tasks,
-      };
-
-      // 序列化并保存
-      const serializedData = JSON.stringify(storageData);
-      GM_setValue(this.STORAGE_KEYS.TASKS, serializedData);
-
-      console.log(`[StorageManager] Saved ${tasks.length} tasks to storage`);
-      return true;
-    } catch (error) {
-      console.error("[StorageManager] Failed to save tasks:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 从存储加载任务列表
-   * @returns {Promise<Array<Task>>} 任务列表
-   */
-  async loadTasks() {
-    try {
-      const serializedData = GM_getValue(this.STORAGE_KEYS.TASKS, null);
-
-      if (!serializedData) {
-        console.log(
-          "[StorageManager] No tasks found in storage, returning empty array",
-        );
-        return [];
-      }
-
-      // 解析存储数据
-      const storageData = JSON.parse(serializedData);
-
-      // 检查数据版本和格式
-      if (!this.validateStorageData(storageData)) {
-        console.warn(
-          "[StorageManager] Invalid storage data format, returning empty array",
-        );
-        return [];
-      }
-
-      const tasks = storageData.tasks || [];
-
-      // 验证任务数据结构
-      this.validateTasksData(tasks);
-
-      console.log(`[StorageManager] Loaded ${tasks.length} tasks from storage`);
-      return tasks;
-    } catch (error) {
-      console.error("[StorageManager] Failed to load tasks:", error);
-      return [];
-    }
-  }
-
-  /**
-   * 清除所有任务数据
-   * @returns {Promise<boolean>} 清除是否成功
-   */
-  async clearTasks() {
-    try {
-      GM_setValue(this.STORAGE_KEYS.TASKS, null);
-      console.log("[StorageManager] Cleared all tasks from storage");
-      return true;
-    } catch (error) {
-      console.error("[StorageManager] Failed to clear tasks:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 保存设置到存储
-   * @param {Object} settings - 设置对象
-   * @returns {Promise<boolean>} 保存是否成功
-   */
-  async saveSettings(settings) {
-    try {
-      if (!settings || typeof settings !== "object") {
-        throw new Error("Settings must be an object");
-      }
-
-      // 验证设置数据结构
-      this.validateSettingsData(settings);
-
-      // 创建存储数据对象
-      const storageData = {
-        version: this.DATA_VERSION,
-        timestamp: Date.now(),
-        settings: settings,
-      };
-
-      // 序列化并保存
-      const serializedData = JSON.stringify(storageData);
-      GM_setValue(this.STORAGE_KEYS.SETTINGS, serializedData);
-
-      console.log("[StorageManager] Settings saved to storage");
-      return true;
-    } catch (error) {
-      console.error("[StorageManager] Failed to save settings:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 从存储加载设置
-   * @returns {Promise<Object>} 设置对象
-   */
-  async loadSettings() {
-    try {
-      const serializedData = GM_getValue(this.STORAGE_KEYS.SETTINGS, null);
-
-      if (!serializedData) {
-        console.log(
-          "[StorageManager] No settings found in storage, returning defaults",
-        );
-        return { ...this.DEFAULT_SETTINGS };
-      }
-
-      // 解析存储数据
-      const storageData = JSON.parse(serializedData);
-
-      // 检查数据版本和格式（使用设置专用的验证器）
-      if (!this.validateSettingsStorageData(storageData)) {
-        console.warn(
-          "[StorageManager] Invalid settings storage data, returning defaults",
-        );
-        return { ...this.DEFAULT_SETTINGS };
-      }
-
-      // 合并默认设置和存储的设置（确保新增字段有默认值）
-      const settings = {
-        ...this.DEFAULT_SETTINGS,
-        ...storageData.settings,
-      };
-
-      // 验证设置数据结构
-      this.validateSettingsData(settings);
-
-      console.log("[StorageManager] Settings loaded from storage");
-      return settings;
-    } catch (error) {
-      console.error("[StorageManager] Failed to load settings:", error);
-      return { ...this.DEFAULT_SETTINGS };
-    }
-  }
-
-  /**
-   * 重置设置为默认值
-   * @returns {Promise<boolean>} 重置是否成功
-   */
-  async resetSettings() {
-    try {
-      const success = await this.saveSettings({ ...this.DEFAULT_SETTINGS });
-      if (success) {
-        console.log("[StorageManager] Settings reset to defaults");
-      }
-      return success;
-    } catch (error) {
-      console.error("[StorageManager] Failed to reset settings:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 通用方法：保存数据到存储
-   * @param {string} key - 存储键
-   * @param {any} value - 要保存的值
-   * @returns {boolean} 保存是否成功
-   */
-  setData(key, value) {
-    try {
-      const serializedData = JSON.stringify(value);
-      GM_setValue(key, serializedData);
-      return true;
-    } catch (error) {
-      console.error(`[StorageManager] Failed to set data for key ${key}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * 通用方法：从存储获取数据
-   * @param {string} key - 存储键
-   * @param {any} defaultValue - 默认值
-   * @returns {any} 存储的值或默认值
-   */
-  getData(key, defaultValue = null) {
-    try {
-      const serializedData = GM_getValue(key, null);
-      if (serializedData === null || serializedData === undefined) {
-        return defaultValue;
-      }
-      return JSON.parse(serializedData);
-    } catch (error) {
-      console.error(`[StorageManager] Failed to get data for key ${key}:`, error);
-      return defaultValue;
-    }
-  }
-
-  /**
-   * 通用方法：从存储删除数据
-   * @param {string} key - 存储键
-   * @returns {boolean} 删除是否成功
-   */
-  removeData(key) {
-    try {
-      GM_setValue(key, undefined);
-      return true;
-    } catch (error) {
-      console.error(`[StorageManager] Failed to remove data for key ${key}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * 获取存储统计信息
-   * @returns {Object} 存储统计信息
-   */
-  async getStorageStats() {
-    try {
-      const tasks = await this.loadTasks();
-      const serializedData = GM_getValue(this.STORAGE_KEYS.TASKS, "");
-
-      return {
-        taskCount: tasks.length,
-        completedTasks: tasks.filter((task) => task.isCompleted).length,
-        pendingTasks: tasks.filter((task) => !task.isCompleted).length,
-        storageSize: new Blob([serializedData]).size,
-        lastUpdated: this.getLastUpdateTime(),
-      };
-    } catch (error) {
-      console.error("[StorageManager] Failed to get storage stats:", error);
-      return null;
-    }
-  }
-
-  /**
-   * 获取最后更新时间
-   * @returns {number|null} 时间戳
-   */
-  getLastUpdateTime() {
-    try {
-      const serializedData = GM_getValue(this.STORAGE_KEYS.TASKS, null);
-      if (!serializedData) return null;
-
-      const storageData = JSON.parse(serializedData);
-      return storageData.timestamp || null;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  /**
-   * 验证存储数据结构（用于任务数据）
-   * @param {Object} storageData - 存储数据对象
-   * @returns {boolean} 验证是否通过
-   */
-  validateStorageData(storageData) {
-    if (!storageData || typeof storageData !== "object") {
-      return false;
-    }
-
-    if (typeof storageData.version !== "number" || storageData.version < 1) {
-      return false;
-    }
-
-    if (!Array.isArray(storageData.tasks)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * 验证设置存储数据结构
-   * @param {Object} storageData - 设置存储数据对象
-   * @returns {boolean} 验证是否通过
-   */
-  validateSettingsStorageData(storageData) {
-    if (!storageData || typeof storageData !== "object") {
-      return false;
-    }
-
-    if (typeof storageData.version !== "number" || storageData.version < 1) {
-      return false;
-    }
-
-    if (!storageData.settings || typeof storageData.settings !== "object") {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * 验证任务数据结构
-   * @param {Array<Task>} tasks - 任务列表
-   * @throws {Error} 如果数据结构无效
-   */
-  validateTasksData(tasks) {
-    if (!Array.isArray(tasks)) {
-      throw new Error("Tasks must be an array");
-    }
-
-    for (let i = 0; i < tasks.length; i++) {
-      const task = tasks[i];
-
-      if (!task || typeof task !== "object") {
-        throw new Error(`Task at index ${i} is not a valid object`);
-      }
-
-      // 验证必需字段
-      const requiredFields = [
-        "id",
-        "title",
-        "isCompleted",
-        "createdAt",
-        "pomodoroCount",
-      ];
-      for (const field of requiredFields) {
-        if (!(field in task)) {
-          throw new Error(
-            `Task at index ${i} is missing required field: ${field}`,
-          );
-        }
-      }
-
-      // 验证字段类型
-      if (typeof task.id !== "string" || task.id.trim() === "") {
-        throw new Error(`Task at index ${i} has invalid id`);
-      }
-
-      if (typeof task.title !== "string" || task.title.trim() === "") {
-        throw new Error(`Task at index ${i} has invalid title`);
-      }
-
-      if (typeof task.isCompleted !== "boolean") {
-        throw new Error(`Task at index ${i} has invalid isCompleted`);
-      }
-
-      if (typeof task.createdAt !== "number" || task.createdAt <= 0) {
-        throw new Error(`Task at index ${i} has invalid createdAt`);
-      }
-
-      if (typeof task.pomodoroCount !== "number" || task.pomodoroCount < 0) {
-        throw new Error(`Task at index ${i} has invalid pomodoroCount`);
-      }
-
-      // 验证可选字段
-      if (
-        task.completedAt !== undefined &&
-        task.completedAt !== null &&
-        (typeof task.completedAt !== "number" || task.completedAt <= 0)
-      ) {
-        throw new Error(`Task at index ${i} has invalid completedAt`);
-      }
-    }
-  }
-
-  /**
-   * 验证设置数据结构
-   * @param {Object} settings - 设置对象
-   * @throws {Error} 如果数据结构无效
-   */
-  validateSettingsData(settings) {
-    if (!settings || typeof settings !== "object") {
-      throw new Error("Settings must be an object");
-    }
-
-    // 验证必需字段
-    const requiredFields = ["pomodoroDuration", "whitelist"];
-    for (const field of requiredFields) {
-      if (!(field in settings)) {
-        throw new Error(`Settings is missing required field: ${field}`);
-      }
-    }
-
-    // 验证 pomodoroDuration
-    if (
-      typeof settings.pomodoroDuration !== "number" ||
-      settings.pomodoroDuration <= 0 ||
-      settings.pomodoroDuration > 120
-    ) {
-      throw new Error(
-        "Settings has invalid pomodoroDuration (must be number between 1-120)",
-      );
-    }
-
-    // 验证 whitelist
-    if (!Array.isArray(settings.whitelist)) {
-      throw new Error("Settings whitelist must be an array");
-    }
-
-    // 验证白名单中的每个域名
-    for (let i = 0; i < settings.whitelist.length; i++) {
-      const domain = settings.whitelist[i];
-      if (typeof domain !== "string" || domain.trim() === "") {
-        throw new Error(
-          `Whitelist domain at index ${i} must be a non-empty string`,
-        );
-      }
-    }
-  }
-
-  /**
-   * 数据迁移 (为未来版本升级预留)
-   * @param {Object} storageData - 旧版本数据
-   * @returns {Object} 迁移后的数据
-   */
-  migrateData(storageData) {
-    // 当前版本为1，暂不需要迁移
-    // 未来版本可以在此处添加数据迁移逻辑
-    return storageData;
-  }
-
-  /**
-   * 导出任务数据为JSON
-   * @returns {Promise<string>} JSON字符串
-   */
-  async exportTasksAsJSON() {
-    try {
-      const tasks = await this.loadTasks();
-      const exportData = {
-        exportTime: Date.now(),
-        version: this.DATA_VERSION,
-        tasks: tasks,
-      };
-
-      return JSON.stringify(exportData, null, 2);
-    } catch (error) {
-      console.error("[StorageManager] Failed to export tasks:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * 从JSON导入任务数据
-   * @param {string} jsonData - JSON字符串
-   * @returns {Promise<boolean>} 导入是否成功
-   */
-  async importTasksFromJSON(jsonData) {
-    try {
-      const importData = JSON.parse(jsonData);
-
-      if (!importData.tasks || !Array.isArray(importData.tasks)) {
-        throw new Error("Invalid import data format");
-      }
-
-      this.validateTasksData(importData.tasks);
-      return await this.saveTasks(importData.tasks);
-    } catch (error) {
-      console.error("[StorageManager] Failed to import tasks:", error);
-      return false;
-    }
-  }
-}
-
-// 创建单例实例
-const storageManager = new StorageManager();
-
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.StorageManager = StorageManager;
-  window.storageManager = storageManager;
-}
-
-    /**
-     * WhitelistManager - 网站白名单管理器
-     */
-    /**
- * 网站白名单管理器类（单例模式）
- */
-class WhitelistManager {
-  constructor() {
-    if (WhitelistManager.instance) {
-      return WhitelistManager.instance;
-    }
-
-    this.domains = new Set(); // 使用 Set 避免重复
-    this.storageManager = null; // 延迟初始化
-
-    WhitelistManager.instance = this;
-  }
-
-  /**
-   * 初始化白名单管理器
-   * @param {StorageManager} storageManager - 存储管理器实例
-   */
-  async initialize(storageManager) {
-    this.storageManager = storageManager;
-
-    try {
-      // 从存储加载白名单数据
-      const settings = await this.storageManager.loadSettings();
-      if (settings && Array.isArray(settings.whitelist)) {
-        this.domains = new Set(settings.whitelist);
-        console.log(
-          `[WhitelistManager] Loaded ${this.domains.size} domains from storage`,
-        );
-      }
-    } catch (error) {
-      console.error("[WhitelistManager] Failed to initialize:", error);
-    }
-  }
-
-  /**
-   * 添加域名到白名单
-   * @param {string} domain - 要添加的域名
-   * @returns {boolean} 添加是否成功
-   */
-  async addDomain(domain) {
-    try {
-      // 验证域名格式
-      const cleanDomain = this.validateAndCleanDomain(domain);
-      if (!cleanDomain) {
-        console.warn("[WhitelistManager] Invalid domain format:", domain);
-        return false;
-      }
-
-      // 检查是否已存在
-      if (this.domains.has(cleanDomain)) {
-        console.warn("[WhitelistManager] Domain already exists:", cleanDomain);
-        return false;
-      }
-
-      // 添加到内存
-      this.domains.add(cleanDomain);
-
-      // 持久化到存储
-      const success = await this.saveToStorage();
-      if (success) {
-        console.log("[WhitelistManager] Domain added:", cleanDomain);
-        this.dispatchChangeEvent("domainAdded", { domain: cleanDomain });
-        return true;
-      } else {
-        // 如果保存失败，从内存中移除
-        this.domains.delete(cleanDomain);
-        return false;
-      }
-    } catch (error) {
-      console.error("[WhitelistManager] Failed to add domain:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 从白名单移除域名
-   * @param {string} domain - 要移除的域名
-   * @returns {boolean} 移除是否成功
-   */
-  async removeDomain(domain) {
-    try {
-      const cleanDomain = this.validateAndCleanDomain(domain);
-      if (!cleanDomain || !this.domains.has(cleanDomain)) {
-        console.warn("[WhitelistManager] Domain not found:", domain);
-        return false;
-      }
-
-      // 从内存移除
-      this.domains.delete(cleanDomain);
-
-      // 持久化到存储
-      const success = await this.saveToStorage();
-      if (success) {
-        console.log("[WhitelistManager] Domain removed:", cleanDomain);
-        this.dispatchChangeEvent("domainRemoved", { domain: cleanDomain });
-        return true;
-      } else {
-        // 如果保存失败，重新添加到内存
-        this.domains.add(cleanDomain);
-        return false;
-      }
-    } catch (error) {
-      console.error("[WhitelistManager] Failed to remove domain:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 检查URL对应的域名是否在白名单中
-   * @param {string} url - 要检查的URL
-   * @returns {boolean} 域名是否被允许
-   */
-  isDomainAllowed(url) {
-    try {
-      const domain = this.extractDomainFromURL(url);
-      if (!domain) {
-        return false;
-      }
-
-      // 使用包含匹配逻辑
-      for (const whitelistDomain of this.domains) {
-        if (domain.includes(whitelistDomain)) {
-          console.log(
-            `[WhitelistManager] Domain allowed: ${domain} (matched: ${whitelistDomain})`,
-          );
-          return true;
-        }
-      }
-
-      return false;
-    } catch (error) {
-      console.error("[WhitelistManager] Failed to check domain:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 获取所有白名单域名
-   * @returns {Array<string>} 域名数组
-   */
-  getDomains() {
-    return Array.from(this.domains).sort();
-  }
-
-  /**
-   * 清空所有白名单域名
-   * @returns {boolean} 清空是否成功
-   */
-  async clearDomains() {
-    try {
-      this.domains.clear();
-      const success = await this.saveToStorage();
-
-      if (success) {
-        console.log("[WhitelistManager] All domains cleared");
-        this.dispatchChangeEvent("domainsCleared");
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.error("[WhitelistManager] Failed to clear domains:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 验证并清理域名格式
-   * @param {string} domain - 原始域名
-   * @returns {string|null} 清理后的域名，无效时返回null
-   */
-  validateAndCleanDomain(domain) {
-    if (typeof domain !== "string") {
-      return null;
-    }
-
-    // 清理空白字符和转换为小写
-    const cleaned = domain.trim().toLowerCase();
-
-    if (cleaned === "") {
-      return null;
-    }
-
-    // 移除协议前缀
-    const withoutProtocol = cleaned.replace(/^https?:\/\//, "");
-
-    // 移除路径、查询参数和片段
-    const domainOnly = withoutProtocol
-      .split("/")[0]
-      .split("?")[0]
-      .split("#")[0];
-
-    // 移除端口号
-    const withoutPort = domainOnly.split(":")[0];
-
-    // 基础域名格式验证
-    if (!this.isValidDomainFormat(withoutPort)) {
-      return null;
-    }
-
-    return withoutPort;
-  }
-
-  /**
-   * 检查域名格式是否有效
-   * @param {string} domain - 域名
-   * @returns {boolean} 格式是否有效
-   */
-  isValidDomainFormat(domain) {
-    // 空字符串检查
-    if (!domain || domain.length === 0) {
-      return false;
-    }
-
-    // 长度检查
-    if (domain.length > 253) {
-      return false;
-    }
-
-    // 基础字符检查：只允许字母、数字、点号和连字符
-    const domainRegex = /^[a-z0-9.-]+$/;
-    if (!domainRegex.test(domain)) {
-      return false;
-    }
-
-    // 检查是否以点号开始或结束
-    if (domain.startsWith(".") || domain.endsWith(".")) {
-      return false;
-    }
-
-    // 检查是否包含连续的点号
-    if (domain.includes("..")) {
-      return false;
-    }
-
-    // 检查各部分长度（每个标签不能超过63个字符）
-    const labels = domain.split(".");
-    for (const label of labels) {
-      if (label.length === 0 || label.length > 63) {
-        return false;
-      }
-
-      // 标签不能以连字符开始或结束
-      if (label.startsWith("-") || label.endsWith("-")) {
-        return false;
-      }
-
-      // 检查标签是否只包含连字符（无效）
-      if (label === "-") {
-        return false;
-      }
-    }
-
-    // 至少要有一个点号（排除纯localhost等）
-    if (!domain.includes(".")) {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * 从URL提取域名
-   * @param {string} url - URL字符串
-   * @returns {string|null} 域名，提取失败返回null
-   */
-  extractDomainFromURL(url) {
-    try {
-      // 如果不是完整URL，假设是域名
-      if (!url.includes("://")) {
-        return this.validateAndCleanDomain(url);
-      }
-
-      const urlObj = new URL(url);
-      return urlObj.hostname.toLowerCase();
-    } catch (error) {
-      // URL构造失败，尝试手动解析
-      const cleaned = url.replace(/^https?:\/\//, "");
-      const domain = cleaned.split("/")[0].split("?")[0].split("#")[0];
-      return this.validateAndCleanDomain(domain);
-    }
-  }
-
-  /**
-   * 保存白名单数据到存储
-   * @returns {boolean} 保存是否成功
-   * @private
-   */
-  async saveToStorage() {
-    if (!this.storageManager) {
-      console.error("[WhitelistManager] StorageManager not initialized");
-      return false;
-    }
-
-    try {
-      // 获取当前设置
-      const settings = await this.storageManager.loadSettings();
-
-      // 更新白名单
-      settings.whitelist = Array.from(this.domains);
-
-      // 保存设置
-      return await this.storageManager.saveSettings(settings);
-    } catch (error) {
-      console.error("[WhitelistManager] Failed to save to storage:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 触发白名单变更事件
-   * @param {string} eventType - 事件类型
-   * @param {Object} detail - 事件详情
-   * @private
-   */
-  dispatchChangeEvent(eventType, detail = {}) {
-    // 检查是否在浏览器环境中
-    if (
-      typeof window !== "undefined" &&
-      typeof document !== "undefined" &&
-      typeof CustomEvent !== "undefined"
-    ) {
-      try {
-        const event = new CustomEvent(`tomato-monkey-whitelist-${eventType}`, {
-          detail: {
-            ...detail,
-            domains: this.getDomains(),
-            timestamp: Date.now(),
-          },
-          bubbles: false,
-          cancelable: false,
-        });
-
-        document.dispatchEvent(event);
-      } catch (error) {
-        console.warn("[WhitelistManager] Failed to dispatch event:", error);
-      }
-    }
-  }
-
-  /**
-   * 获取白名单统计信息
-   * @returns {Object} 统计信息
-   */
-  getStats() {
-    return {
-      totalDomains: this.domains.size,
-      domains: this.getDomains(),
-      lastModified: Date.now(),
-    };
-  }
-}
-
-// 创建单例实例
-const whitelistManager = new WhitelistManager();
-
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.WhitelistManager = WhitelistManager;
-  window.whitelistManager = whitelistManager;
-}
     
     /**
      * BlockerManager - 网站拦截逻辑管理器
@@ -1516,7 +632,515 @@ if (typeof window !== "undefined") {
 }
 
 // 模块导出 (支持 CommonJS 和 ES6)
-    
+
+    /**
+     * StorageManager - 数据持久化管理器
+     */
+    /**
+ * 存储管理器类
+ */
+class StorageManager {
+  constructor() {
+    // 存储键值常量
+    this.STORAGE_KEYS = {
+      TASKS: "TOMATO_MONKEY_TASKS",
+      SETTINGS: "TOMATO_MONKEY_SETTINGS",
+      STATISTICS: "TOMATO_MONKEY_STATISTICS",
+    };
+
+    // 数据版本管理
+    this.DATA_VERSION = 1;
+
+    // 默认设置
+    this.DEFAULT_SETTINGS = {
+      pomodoroDuration: 25, // 默认番茄钟时长（分钟）
+      whitelist: [], // 默认空白名单
+    };
+  }
+
+  /**
+   * 保存任务列表到存储
+   * @param {Array<Task>} tasks - 任务列表
+   * @returns {Promise<boolean>} 保存是否成功
+   */
+  async saveTasks(tasks) {
+    try {
+      if (!Array.isArray(tasks)) {
+        throw new Error("Tasks must be an array");
+      }
+
+      // 验证任务数据结构
+      this.validateTasksData(tasks);
+
+      // 创建存储数据对象
+      const storageData = {
+        version: this.DATA_VERSION,
+        timestamp: Date.now(),
+        tasks: tasks,
+      };
+
+      // 序列化并保存
+      const serializedData = JSON.stringify(storageData);
+      GM_setValue(this.STORAGE_KEYS.TASKS, serializedData);
+
+      console.log(`[StorageManager] Saved ${tasks.length} tasks to storage`);
+      return true;
+    } catch (error) {
+      console.error("[StorageManager] Failed to save tasks:", error);
+      return false;
+    }
+  }
+
+  /**
+   * 从存储加载任务列表
+   * @returns {Promise<Array<Task>>} 任务列表
+   */
+  async loadTasks() {
+    try {
+      const serializedData = GM_getValue(this.STORAGE_KEYS.TASKS, null);
+
+      if (!serializedData) {
+        console.log(
+          "[StorageManager] No tasks found in storage, returning empty array",
+        );
+        return [];
+      }
+
+      // 解析存储数据
+      const storageData = JSON.parse(serializedData);
+
+      // 检查数据版本和格式
+      if (!this.validateStorageData(storageData)) {
+        console.warn(
+          "[StorageManager] Invalid storage data format, returning empty array",
+        );
+        return [];
+      }
+
+      const tasks = storageData.tasks || [];
+
+      // 验证任务数据结构
+      this.validateTasksData(tasks);
+
+      console.log(`[StorageManager] Loaded ${tasks.length} tasks from storage`);
+      return tasks;
+    } catch (error) {
+      console.error("[StorageManager] Failed to load tasks:", error);
+      return [];
+    }
+  }
+
+  /**
+   * 清除所有任务数据
+   * @returns {Promise<boolean>} 清除是否成功
+   */
+  async clearTasks() {
+    try {
+      GM_setValue(this.STORAGE_KEYS.TASKS, null);
+      console.log("[StorageManager] Cleared all tasks from storage");
+      return true;
+    } catch (error) {
+      console.error("[StorageManager] Failed to clear tasks:", error);
+      return false;
+    }
+  }
+
+  /**
+   * 保存设置到存储
+   * @param {Object} settings - 设置对象
+   * @returns {Promise<boolean>} 保存是否成功
+   */
+  async saveSettings(settings) {
+    try {
+      if (!settings || typeof settings !== "object") {
+        throw new Error("Settings must be an object");
+      }
+
+      // 验证设置数据结构
+      this.validateSettingsData(settings);
+
+      // 创建存储数据对象
+      const storageData = {
+        version: this.DATA_VERSION,
+        timestamp: Date.now(),
+        settings: settings,
+      };
+
+      // 序列化并保存
+      const serializedData = JSON.stringify(storageData);
+      GM_setValue(this.STORAGE_KEYS.SETTINGS, serializedData);
+
+      console.log("[StorageManager] Settings saved to storage");
+      return true;
+    } catch (error) {
+      console.error("[StorageManager] Failed to save settings:", error);
+      return false;
+    }
+  }
+
+  /**
+   * 从存储加载设置
+   * @returns {Promise<Object>} 设置对象
+   */
+  async loadSettings() {
+    try {
+      const serializedData = GM_getValue(this.STORAGE_KEYS.SETTINGS, null);
+
+      if (!serializedData) {
+        console.log(
+          "[StorageManager] No settings found in storage, returning defaults",
+        );
+        return { ...this.DEFAULT_SETTINGS };
+      }
+
+      // 解析存储数据
+      const storageData = JSON.parse(serializedData);
+
+      // 检查数据版本和格式（使用设置专用的验证器）
+      if (!this.validateSettingsStorageData(storageData)) {
+        console.warn(
+          "[StorageManager] Invalid settings storage data, returning defaults",
+        );
+        return { ...this.DEFAULT_SETTINGS };
+      }
+
+      // 合并默认设置和存储的设置（确保新增字段有默认值）
+      const settings = {
+        ...this.DEFAULT_SETTINGS,
+        ...storageData.settings,
+      };
+
+      // 验证设置数据结构
+      this.validateSettingsData(settings);
+
+      console.log("[StorageManager] Settings loaded from storage");
+      return settings;
+    } catch (error) {
+      console.error("[StorageManager] Failed to load settings:", error);
+      return { ...this.DEFAULT_SETTINGS };
+    }
+  }
+
+  /**
+   * 重置设置为默认值
+   * @returns {Promise<boolean>} 重置是否成功
+   */
+  async resetSettings() {
+    try {
+      const success = await this.saveSettings({ ...this.DEFAULT_SETTINGS });
+      if (success) {
+        console.log("[StorageManager] Settings reset to defaults");
+      }
+      return success;
+    } catch (error) {
+      console.error("[StorageManager] Failed to reset settings:", error);
+      return false;
+    }
+  }
+
+  /**
+   * 通用方法：保存数据到存储
+   * @param {string} key - 存储键
+   * @param {any} value - 要保存的值
+   * @returns {boolean} 保存是否成功
+   */
+  setData(key, value) {
+    try {
+      const serializedData = JSON.stringify(value);
+      GM_setValue(key, serializedData);
+      return true;
+    } catch (error) {
+      console.error(`[StorageManager] Failed to set data for key ${key}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * 通用方法：从存储获取数据
+   * @param {string} key - 存储键
+   * @param {any} defaultValue - 默认值
+   * @returns {any} 存储的值或默认值
+   */
+  getData(key, defaultValue = null) {
+    try {
+      const serializedData = GM_getValue(key, null);
+      if (serializedData === null || serializedData === undefined) {
+        return defaultValue;
+      }
+      return JSON.parse(serializedData);
+    } catch (error) {
+      console.error(`[StorageManager] Failed to get data for key ${key}:`, error);
+      return defaultValue;
+    }
+  }
+
+  /**
+   * 通用方法：从存储删除数据
+   * @param {string} key - 存储键
+   * @returns {boolean} 删除是否成功
+   */
+  removeData(key) {
+    try {
+      GM_setValue(key, undefined);
+      return true;
+    } catch (error) {
+      console.error(`[StorageManager] Failed to remove data for key ${key}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * 获取存储统计信息
+   * @returns {Object} 存储统计信息
+   */
+  async getStorageStats() {
+    try {
+      const tasks = await this.loadTasks();
+      const serializedData = GM_getValue(this.STORAGE_KEYS.TASKS, "");
+
+      return {
+        taskCount: tasks.length,
+        completedTasks: tasks.filter((task) => task.isCompleted).length,
+        pendingTasks: tasks.filter((task) => !task.isCompleted).length,
+        storageSize: new Blob([serializedData]).size,
+        lastUpdated: this.getLastUpdateTime(),
+      };
+    } catch (error) {
+      console.error("[StorageManager] Failed to get storage stats:", error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取最后更新时间
+   * @returns {number|null} 时间戳
+   */
+  getLastUpdateTime() {
+    try {
+      const serializedData = GM_getValue(this.STORAGE_KEYS.TASKS, null);
+      if (!serializedData) return null;
+
+      const storageData = JSON.parse(serializedData);
+      return storageData.timestamp || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * 验证存储数据结构（用于任务数据）
+   * @param {Object} storageData - 存储数据对象
+   * @returns {boolean} 验证是否通过
+   */
+  validateStorageData(storageData) {
+    if (!storageData || typeof storageData !== "object") {
+      return false;
+    }
+
+    if (typeof storageData.version !== "number" || storageData.version < 1) {
+      return false;
+    }
+
+    if (!Array.isArray(storageData.tasks)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * 验证设置存储数据结构
+   * @param {Object} storageData - 设置存储数据对象
+   * @returns {boolean} 验证是否通过
+   */
+  validateSettingsStorageData(storageData) {
+    if (!storageData || typeof storageData !== "object") {
+      return false;
+    }
+
+    if (typeof storageData.version !== "number" || storageData.version < 1) {
+      return false;
+    }
+
+    if (!storageData.settings || typeof storageData.settings !== "object") {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * 验证任务数据结构
+   * @param {Array<Task>} tasks - 任务列表
+   * @throws {Error} 如果数据结构无效
+   */
+  validateTasksData(tasks) {
+    if (!Array.isArray(tasks)) {
+      throw new Error("Tasks must be an array");
+    }
+
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
+
+      if (!task || typeof task !== "object") {
+        throw new Error(`Task at index ${i} is not a valid object`);
+      }
+
+      // 验证必需字段
+      const requiredFields = [
+        "id",
+        "title",
+        "isCompleted",
+        "createdAt",
+        "pomodoroCount",
+      ];
+      for (const field of requiredFields) {
+        if (!(field in task)) {
+          throw new Error(
+            `Task at index ${i} is missing required field: ${field}`,
+          );
+        }
+      }
+
+      // 验证字段类型
+      if (typeof task.id !== "string" || task.id.trim() === "") {
+        throw new Error(`Task at index ${i} has invalid id`);
+      }
+
+      if (typeof task.title !== "string" || task.title.trim() === "") {
+        throw new Error(`Task at index ${i} has invalid title`);
+      }
+
+      if (typeof task.isCompleted !== "boolean") {
+        throw new Error(`Task at index ${i} has invalid isCompleted`);
+      }
+
+      if (typeof task.createdAt !== "number" || task.createdAt <= 0) {
+        throw new Error(`Task at index ${i} has invalid createdAt`);
+      }
+
+      if (typeof task.pomodoroCount !== "number" || task.pomodoroCount < 0) {
+        throw new Error(`Task at index ${i} has invalid pomodoroCount`);
+      }
+
+      // 验证可选字段
+      if (
+        task.completedAt !== undefined &&
+        task.completedAt !== null &&
+        (typeof task.completedAt !== "number" || task.completedAt <= 0)
+      ) {
+        throw new Error(`Task at index ${i} has invalid completedAt`);
+      }
+    }
+  }
+
+  /**
+   * 验证设置数据结构
+   * @param {Object} settings - 设置对象
+   * @throws {Error} 如果数据结构无效
+   */
+  validateSettingsData(settings) {
+    if (!settings || typeof settings !== "object") {
+      throw new Error("Settings must be an object");
+    }
+
+    // 验证必需字段
+    const requiredFields = ["pomodoroDuration", "whitelist"];
+    for (const field of requiredFields) {
+      if (!(field in settings)) {
+        throw new Error(`Settings is missing required field: ${field}`);
+      }
+    }
+
+    // 验证 pomodoroDuration
+    if (
+      typeof settings.pomodoroDuration !== "number" ||
+      settings.pomodoroDuration <= 0 ||
+      settings.pomodoroDuration > 120
+    ) {
+      throw new Error(
+        "Settings has invalid pomodoroDuration (must be number between 1-120)",
+      );
+    }
+
+    // 验证 whitelist
+    if (!Array.isArray(settings.whitelist)) {
+      throw new Error("Settings whitelist must be an array");
+    }
+
+    // 验证白名单中的每个域名
+    for (let i = 0; i < settings.whitelist.length; i++) {
+      const domain = settings.whitelist[i];
+      if (typeof domain !== "string" || domain.trim() === "") {
+        throw new Error(
+          `Whitelist domain at index ${i} must be a non-empty string`,
+        );
+      }
+    }
+  }
+
+  /**
+   * 数据迁移 (为未来版本升级预留)
+   * @param {Object} storageData - 旧版本数据
+   * @returns {Object} 迁移后的数据
+   */
+  migrateData(storageData) {
+    // 当前版本为1，暂不需要迁移
+    // 未来版本可以在此处添加数据迁移逻辑
+    return storageData;
+  }
+
+  /**
+   * 导出任务数据为JSON
+   * @returns {Promise<string>} JSON字符串
+   */
+  async exportTasksAsJSON() {
+    try {
+      const tasks = await this.loadTasks();
+      const exportData = {
+        exportTime: Date.now(),
+        version: this.DATA_VERSION,
+        tasks: tasks,
+      };
+
+      return JSON.stringify(exportData, null, 2);
+    } catch (error) {
+      console.error("[StorageManager] Failed to export tasks:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 从JSON导入任务数据
+   * @param {string} jsonData - JSON字符串
+   * @returns {Promise<boolean>} 导入是否成功
+   */
+  async importTasksFromJSON(jsonData) {
+    try {
+      const importData = JSON.parse(jsonData);
+
+      if (!importData.tasks || !Array.isArray(importData.tasks)) {
+        throw new Error("Invalid import data format");
+      }
+
+      this.validateTasksData(importData.tasks);
+      return await this.saveTasks(importData.tasks);
+    } catch (error) {
+      console.error("[StorageManager] Failed to import tasks:", error);
+      return false;
+    }
+  }
+}
+
+// 创建单例实例
+const storageManager = new StorageManager();
+
+// 如果在浏览器环境中，将其添加到全局对象
+if (typeof window !== "undefined") {
+  window.StorageManager = StorageManager;
+  window.storageManager = storageManager;
+}
+
     /**
      * TaskManager - 任务管理器
      */
@@ -1916,7 +1540,7 @@ if (typeof window !== "undefined") {
   window.TaskManager = TaskManager;
   window.taskManager = taskManager;
 }
-    
+
     /**
      * TimerManager - 计时器管理器
      */
@@ -2562,1413 +2186,267 @@ if (typeof window !== "undefined") {
 }
 
 // 模块导出 (支持 CommonJS 和 ES6)
-    
+
     /**
-     * SettingsPanel - 设置面板UI组件
+     * WhitelistManager - 网站白名单管理器
      */
     /**
- * 设置面板类
+ * 网站白名单管理器类（单例模式）
  */
-class SettingsPanel {
+class WhitelistManager {
   constructor() {
-    this.isVisible = false;
-    this.activeTab = "todo"; // 默认激活ToDo标签页
-    this.panel = null;
-    this.contentArea = null;
-    this.tabs = new Map(); // 存储标签页组件
-
-    // 白名单相关
-    this.whitelistManager = null;
-    this.whitelistElements = null;
-    this.undoToast = null;
-    this.undoTimeout = null;
-
-    // 标签页配置
-    this.tabConfig = [
-      {
-        id: "todo",
-        name: "ToDo列表",
-        icon: "✅",
-        component: null, // 将在后续设置
-      },
-      {
-        id: "whitelist",
-        name: "网站白名单",
-        icon: "🌐",
-        component: null,
-      },
-      {
-        id: "statistics",
-        name: "效率统计",
-        icon: "📊",
-        component: null,
-      },
-    ];
-
-    this.initialize();
-  }
-
-  /**
-   * 初始化设置面板
-   */
-  async initialize() {
-    this.createPanelStructure();
-    this.createNavigation();
-    this.createContentArea();
-    this.setupEventListeners();
-    await this.initializeWhitelist(); // 初始化白名单功能
-    this.activateTab(this.activeTab);
-
-    console.log("[SettingsPanel] Initialized successfully");
-  }
-
-  /**
-   * 创建面板基础结构
-   */
-  createPanelStructure() {
-    // 创建遮罩层
-    const overlay = document.createElement("div");
-    overlay.id = "tomato-monkey-overlay";
-    overlay.className = "tomato-monkey-overlay tomato-monkey-hidden";
-
-    // 创建主面板
-    this.panel = document.createElement("div");
-    this.panel.id = "tomato-monkey-settings-panel";
-    this.panel.className = "tomato-monkey-settings-panel tomato-monkey-hidden";
-
-    // 设置基础样式
-    this.applyBaseStyles();
-
-    // 创建面板头部
-    const header = document.createElement("div");
-    header.className = "settings-header";
-    header.innerHTML = `
-            <div class="header-title">
-                <span class="header-icon">🍅</span>
-                <h2>TomatoMonkey 设置</h2>
-            </div>
-            <button class="close-button" type="button" title="关闭设置面板 (Ctrl+Shift+T)">
-                ✕
-            </button>
-        `;
-
-    // 创建面板主体
-    const body = document.createElement("div");
-    body.className = "settings-body";
-
-    // 创建左侧导航区域
-    const navigation = document.createElement("nav");
-    navigation.className = "settings-navigation";
-
-    // 创建右侧内容区域
-    this.contentArea = document.createElement("main");
-    this.contentArea.className = "settings-content";
-
-    // 组装面板结构
-    body.appendChild(navigation);
-    body.appendChild(this.contentArea);
-    this.panel.appendChild(header);
-    this.panel.appendChild(body);
-
-    // 添加到页面
-    document.body.appendChild(overlay);
-    document.body.appendChild(this.panel);
-
-    // 存储引用
-    this.overlay = overlay;
-    this.navigation = navigation;
-    this.headerElement = header;
-  }
-
-  /**
-   * 创建导航标签页
-   */
-  createNavigation() {
-    const tabList = document.createElement("ul");
-    tabList.className = "tab-list";
-    tabList.setAttribute("role", "tablist");
-
-    this.tabConfig.forEach((tab, index) => {
-      const tabItem = document.createElement("li");
-      tabItem.className = "tab-item";
-
-      const tabButton = document.createElement("button");
-      tabButton.type = "button";
-      tabButton.className = `tab-button ${tab.id === this.activeTab ? "active" : ""}`;
-      tabButton.setAttribute("role", "tab");
-      tabButton.setAttribute("aria-controls", `${tab.id}-panel`);
-      tabButton.setAttribute(
-        "aria-selected",
-        tab.id === this.activeTab ? "true" : "false",
-      );
-      tabButton.setAttribute(
-        "tabindex",
-        tab.id === this.activeTab ? "0" : "-1",
-      );
-      tabButton.dataset.tabId = tab.id;
-
-      tabButton.innerHTML = `
-                <span class="tab-icon">${tab.icon}</span>
-                <span class="tab-name">${tab.name}</span>
-            `;
-
-      // 添加事件监听
-      tabButton.addEventListener("click", (e) => {
-        this.activateTab(tab.id);
-      });
-
-      // 键盘导航支持
-      tabButton.addEventListener("keydown", (e) => {
-        this.handleTabKeydown(e, index);
-      });
-
-      tabItem.appendChild(tabButton);
-      tabList.appendChild(tabItem);
-    });
-
-    this.navigation.appendChild(tabList);
-    this.tabButtons = this.navigation.querySelectorAll(".tab-button");
-  }
-
-  /**
-   * 创建内容区域
-   */
-  createContentArea() {
-    // 为每个标签页创建内容面板
-    this.tabConfig.forEach((tab) => {
-      const contentPanel = document.createElement("div");
-      contentPanel.id = `${tab.id}-panel`;
-      contentPanel.className = `content-panel ${tab.id === this.activeTab ? "active" : "hidden"}`;
-      contentPanel.setAttribute("role", "tabpanel");
-      contentPanel.setAttribute("aria-labelledby", `${tab.id}-tab`);
-
-      // 根据标签页类型创建不同的内容
-      switch (tab.id) {
-        case "todo":
-          contentPanel.innerHTML = `
-                        <div class="panel-header">
-                            <h3>任务管理</h3>
-                            <p>管理您的待办事项列表</p>
-                        </div>
-                        <div id="todo-container" class="todo-container">
-                            <!-- ToDo List组件将插入这里 -->
-                        </div>
-                    `;
-          break;
-
-        case "whitelist":
-          contentPanel.innerHTML = `
-                        <div class="panel-header">
-                            <h3>网站白名单</h3>
-                            <p>设置专注期间允许访问的网站（使用包含匹配）</p>
-                        </div>
-                        <div class="whitelist-container">
-                            <div class="whitelist-input-section">
-                                <div class="input-group">
-                                    <input 
-                                        type="text" 
-                                        id="whitelist-domain-input" 
-                                        class="domain-input" 
-                                        placeholder="输入域名，如：google.com"
-                                        aria-label="域名输入"
-                                    />
-                                    <button 
-                                        type="button" 
-                                        id="whitelist-add-button" 
-                                        class="add-domain-button"
-                                        aria-label="添加域名到白名单"
-                                    >
-                                        添加域名
-                                    </button>
-                                </div>
-                                <div class="input-feedback" id="whitelist-input-feedback" role="alert" aria-live="polite"></div>
-                            </div>
-                            <div class="whitelist-list-section">
-                                <div class="list-header">
-                                    <h4>已添加的域名</h4>
-                                    <span class="domain-count" id="whitelist-domain-count">0 个域名</span>
-                                </div>
-                                <div class="domain-list" id="whitelist-domain-list" role="list">
-                                    <div class="empty-state" id="whitelist-empty-state">
-                                        <div class="empty-icon">🌐</div>
-                                        <p>暂无白名单域名</p>
-                                        <small>添加域名后，专注期间将允许访问包含这些域名的网站</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-          break;
-
-        case "statistics":
-          contentPanel.innerHTML = `
-                        <div class="panel-header">
-                            <h3>效率统计</h3>
-                            <p>查看您的专注时间和任务完成统计</p>
-                        </div>
-                        <div class="placeholder-content">
-                            <div class="placeholder-icon">📊</div>
-                            <p>统计功能即将上线</p>
-                        </div>
-                    `;
-          break;
-      }
-
-      this.contentArea.appendChild(contentPanel);
-      this.tabs.set(tab.id, contentPanel);
-    });
-  }
-
-  /**
-   * 设置事件监听器
-   */
-  setupEventListeners() {
-    // 关闭按钮
-    const closeButton = this.headerElement.querySelector(".close-button");
-    closeButton.addEventListener("click", () => this.hide());
-
-    // 遮罩层点击关闭
-    this.overlay.addEventListener("click", () => this.hide());
-
-    // ESC键关闭
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.isVisible) {
-        this.hide();
-      }
-    });
-
-    // 防止面板内点击冒泡到遮罩层
-    this.panel.addEventListener("click", (e) => e.stopPropagation());
-  }
-
-  /**
-   * 处理标签页键盘导航
-   * @param {KeyboardEvent} e - 键盘事件
-   * @param {number} currentIndex - 当前标签页索引
-   */
-  handleTabKeydown(e, currentIndex) {
-    let targetIndex = currentIndex;
-
-    switch (e.key) {
-      case "ArrowLeft":
-      case "ArrowUp":
-        targetIndex =
-          currentIndex > 0 ? currentIndex - 1 : this.tabConfig.length - 1;
-        e.preventDefault();
-        break;
-
-      case "ArrowRight":
-      case "ArrowDown":
-        targetIndex =
-          currentIndex < this.tabConfig.length - 1 ? currentIndex + 1 : 0;
-        e.preventDefault();
-        break;
-
-      case "Home":
-        targetIndex = 0;
-        e.preventDefault();
-        break;
-
-      case "End":
-        targetIndex = this.tabConfig.length - 1;
-        e.preventDefault();
-        break;
-
-      case "Enter":
-      case " ":
-        this.activateTab(this.tabConfig[currentIndex].id);
-        e.preventDefault();
-        break;
+    if (WhitelistManager.instance) {
+      return WhitelistManager.instance;
     }
 
-    if (targetIndex !== currentIndex) {
-      this.tabButtons[targetIndex].focus();
-    }
+    this.domains = new Set(); // 使用 Set 避免重复
+    this.storageManager = null; // 延迟初始化
+
+    WhitelistManager.instance = this;
   }
 
   /**
-   * 激活指定标签页
-   * @param {string} tabId - 标签页ID
+   * 初始化白名单管理器
+   * @param {StorageManager} storageManager - 存储管理器实例
    */
-  activateTab(tabId) {
-    if (!this.tabs.has(tabId)) {
-      console.warn(`[SettingsPanel] Tab not found: ${tabId}`);
-      return;
-    }
+  async initialize(storageManager) {
+    this.storageManager = storageManager;
 
-    const previousTab = this.activeTab;
-    this.activeTab = tabId;
-
-    // 更新标签页按钮状态
-    this.tabButtons.forEach((button) => {
-      const isActive = button.dataset.tabId === tabId;
-      button.classList.toggle("active", isActive);
-      button.setAttribute("aria-selected", isActive ? "true" : "false");
-      button.setAttribute("tabindex", isActive ? "0" : "-1");
-    });
-
-    // 更新内容面板显示
-    this.tabs.forEach((panel, id) => {
-      const isActive = id === tabId;
-      panel.classList.toggle("active", isActive);
-      panel.classList.toggle("hidden", !isActive);
-    });
-
-    console.log(`[SettingsPanel] Activated tab: ${tabId}`);
-
-    // 触发标签页切换事件
-    this.dispatchEvent("tabChanged", {
-      activeTab: tabId,
-      previousTab,
-      panel: this.tabs.get(tabId),
-    });
-  }
-
-  /**
-   * 显示设置面板
-   */
-  show() {
-    if (this.isVisible) return;
-
-    this.overlay.classList.remove("tomato-monkey-hidden");
-    this.panel.classList.remove("tomato-monkey-hidden");
-
-    // 添加显示动画类
-    setTimeout(() => {
-      this.overlay.classList.add("show");
-      this.panel.classList.add("show");
-    }, 10);
-
-    // 聚焦到活动标签页
-    const activeTabButton = this.navigation.querySelector(".tab-button.active");
-    if (activeTabButton) {
-      activeTabButton.focus();
-    }
-
-    this.isVisible = true;
-    console.log("[SettingsPanel] Panel shown");
-
-    this.dispatchEvent("panelShown");
-  }
-
-  /**
-   * 隐藏设置面板
-   */
-  hide() {
-    if (!this.isVisible) return;
-
-    this.overlay.classList.remove("show");
-    this.panel.classList.remove("show");
-
-    // 等待动画结束后完全隐藏
-    setTimeout(() => {
-      this.overlay.classList.add("tomato-monkey-hidden");
-      this.panel.classList.add("tomato-monkey-hidden");
-    }, 300);
-
-    this.isVisible = false;
-    console.log("[SettingsPanel] Panel hidden");
-
-    this.dispatchEvent("panelHidden");
-  }
-
-  /**
-   * 切换设置面板显示状态
-   */
-  toggle() {
-    if (this.isVisible) {
-      this.hide();
-    } else {
-      this.show();
-    }
-  }
-
-  /**
-   * 获取指定标签页的容器元素
-   * @param {string} tabId - 标签页ID
-   * @returns {HTMLElement|null} 容器元素
-   */
-  getTabContainer(tabId) {
-    return this.tabs.get(tabId) || null;
-  }
-
-  /**
-   * 注册标签页组件
-   * @param {string} tabId - 标签页ID
-   * @param {Object} component - 组件实例
-   */
-  registerTabComponent(tabId, component) {
-    const tabConfig = this.tabConfig.find((tab) => tab.id === tabId);
-    if (tabConfig) {
-      tabConfig.component = component;
-      console.log(`[SettingsPanel] Registered component for tab: ${tabId}`);
-    }
-  }
-
-  /**
-   * 初始化白名单功能
-   */
-  async initializeWhitelist() {
     try {
-      // 初始化 WhitelistManager（需要确保 WhitelistManager 和 StorageManager 已加载）
-      if (
-        typeof window.whitelistManager !== "undefined" &&
-        typeof window.storageManager !== "undefined"
-      ) {
-        this.whitelistManager = window.whitelistManager;
-        await this.whitelistManager.initialize(window.storageManager);
-
-        // 设置DOM元素引用
-        this.setupWhitelistElements();
-
-        // 绑定事件处理器
-        this.setupWhitelistEventListeners();
-
-        // 加载并显示现有域名
-        await this.refreshWhitelistUI();
-
-        console.log("[SettingsPanel] Whitelist initialized successfully");
-      } else {
-        console.warn(
-          "[SettingsPanel] WhitelistManager or StorageManager not available",
+      // 从存储加载白名单数据
+      const settings = await this.storageManager.loadSettings();
+      if (settings && Array.isArray(settings.whitelist)) {
+        this.domains = new Set(settings.whitelist);
+        console.log(
+          `[WhitelistManager] Loaded ${this.domains.size} domains from storage`,
         );
       }
     } catch (error) {
-      console.error("[SettingsPanel] Failed to initialize whitelist:", error);
+      console.error("[WhitelistManager] Failed to initialize:", error);
     }
   }
 
   /**
-   * 设置白名单DOM元素引用
+   * 添加域名到白名单
+   * @param {string} domain - 要添加的域名
+   * @returns {boolean} 添加是否成功
    */
-  setupWhitelistElements() {
-    const whitelistPanel = this.tabs.get("whitelist");
-    if (!whitelistPanel) return;
-
-    this.whitelistElements = {
-      input: whitelistPanel.querySelector("#whitelist-domain-input"),
-      addButton: whitelistPanel.querySelector("#whitelist-add-button"),
-      feedback: whitelistPanel.querySelector("#whitelist-input-feedback"),
-      domainList: whitelistPanel.querySelector("#whitelist-domain-list"),
-      domainCount: whitelistPanel.querySelector("#whitelist-domain-count"),
-      emptyState: whitelistPanel.querySelector("#whitelist-empty-state"),
-    };
-  }
-
-  /**
-   * 设置白名单事件监听器
-   */
-  setupWhitelistEventListeners() {
-    if (!this.whitelistElements) return;
-
-    const { input, addButton } = this.whitelistElements;
-
-    // 添加域名按钮点击事件
-    addButton.addEventListener("click", () => this.handleAddDomain());
-
-    // 输入框回车事件
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        this.handleAddDomain();
-      }
-    });
-
-    // 输入实时验证
-    input.addEventListener("input", () => this.validateDomainInput());
-
-    // 监听白名单变更事件
-    document.addEventListener("tomato-monkey-whitelist-domainAdded", () =>
-      this.refreshWhitelistUI(),
-    );
-    document.addEventListener("tomato-monkey-whitelist-domainRemoved", () =>
-      this.refreshWhitelistUI(),
-    );
-    document.addEventListener("tomato-monkey-whitelist-domainsCleared", () =>
-      this.refreshWhitelistUI(),
-    );
-  }
-
-  /**
-   * 处理添加域名操作
-   */
-  async handleAddDomain() {
-    if (!this.whitelistManager || !this.whitelistElements) return;
-
-    const { input, addButton, feedback } = this.whitelistElements;
-    const domain = input.value.trim();
-
-    if (!domain) {
-      this.showFeedback("请输入域名", "error");
-      return;
-    }
-
-    // 禁用按钮防止重复提交
-    addButton.disabled = true;
-    addButton.classList.add("loading");
-
+  async addDomain(domain) {
     try {
-      const success = await this.whitelistManager.addDomain(domain);
+      // 验证域名格式
+      const cleanDomain = this.validateAndCleanDomain(domain);
+      if (!cleanDomain) {
+        console.warn("[WhitelistManager] Invalid domain format:", domain);
+        return false;
+      }
 
+      // 检查是否已存在
+      if (this.domains.has(cleanDomain)) {
+        console.warn("[WhitelistManager] Domain already exists:", cleanDomain);
+        return false;
+      }
+
+      // 添加到内存
+      this.domains.add(cleanDomain);
+
+      // 持久化到存储
+      const success = await this.saveToStorage();
       if (success) {
-        input.value = "";
-        this.showFeedback("域名添加成功", "success");
-        input.focus();
+        console.log("[WhitelistManager] Domain added:", cleanDomain);
+        this.dispatchChangeEvent("domainAdded", { domain: cleanDomain });
+        return true;
       } else {
-        this.showFeedback("域名格式无效或已存在", "error");
+        // 如果保存失败，从内存中移除
+        this.domains.delete(cleanDomain);
+        return false;
       }
     } catch (error) {
-      console.error("[SettingsPanel] Failed to add domain:", error);
-      this.showFeedback("添加失败，请重试", "error");
-    } finally {
-      addButton.disabled = false;
-      addButton.classList.remove("loading");
+      console.error("[WhitelistManager] Failed to add domain:", error);
+      return false;
     }
   }
 
   /**
-   * 处理删除域名操作（带撤销确认）
+   * 从白名单移除域名
+   * @param {string} domain - 要移除的域名
+   * @returns {boolean} 移除是否成功
    */
-  async handleRemoveDomain(domain) {
-    if (!this.whitelistManager) return;
-
+  async removeDomain(domain) {
     try {
-      const success = await this.whitelistManager.removeDomain(domain);
+      const cleanDomain = this.validateAndCleanDomain(domain);
+      if (!cleanDomain || !this.domains.has(cleanDomain)) {
+        console.warn("[WhitelistManager] Domain not found:", domain);
+        return false;
+      }
 
+      // 从内存移除
+      this.domains.delete(cleanDomain);
+
+      // 持久化到存储
+      const success = await this.saveToStorage();
       if (success) {
-        this.showUndoToast(domain);
+        console.log("[WhitelistManager] Domain removed:", cleanDomain);
+        this.dispatchChangeEvent("domainRemoved", { domain: cleanDomain });
+        return true;
       } else {
-        this.showFeedback("删除失败，请重试", "error");
+        // 如果保存失败，重新添加到内存
+        this.domains.add(cleanDomain);
+        return false;
       }
     } catch (error) {
-      console.error("[SettingsPanel] Failed to remove domain:", error);
-      this.showFeedback("删除失败，请重试", "error");
+      console.error("[WhitelistManager] Failed to remove domain:", error);
+      return false;
     }
   }
 
   /**
-   * 显示撤销Toast
+   * 检查URL对应的域名是否在白名单中
+   * @param {string} url - 要检查的URL
+   * @returns {boolean} 域名是否被允许
    */
-  showUndoToast(deletedDomain) {
-    // 清除现有的撤销Toast和定时器
-    this.hideUndoToast();
-
-    // 创建Toast元素
-    this.undoToast = document.createElement("div");
-    this.undoToast.className = "undo-toast";
-    this.undoToast.setAttribute("role", "alert");
-    this.undoToast.setAttribute("aria-live", "polite");
-
-    this.undoToast.innerHTML = `
-      <div class="undo-toast-content">
-        <span class="undo-message">已删除域名: ${this.escapeHtml(deletedDomain)}</span>
-        <button type="button" class="undo-button" aria-label="撤销删除域名 ${this.escapeHtml(deletedDomain)}">
-          撤销
-        </button>
-        <button type="button" class="toast-close-button" aria-label="关闭撤销提示">
-          ✕
-        </button>
-      </div>
-      <div class="undo-progress" aria-hidden="true"></div>
-    `;
-
-    // 添加到页面
-    document.body.appendChild(this.undoToast);
-
-    // 绑定撤销按钮事件
-    const undoButton = this.undoToast.querySelector(".undo-button");
-    const closeButton = this.undoToast.querySelector(".toast-close-button");
-
-    undoButton.addEventListener("click", () =>
-      this.handleUndoDelete(deletedDomain),
-    );
-    closeButton.addEventListener("click", () => this.hideUndoToast());
-
-    // 键盘支持
-    this.undoToast.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        this.hideUndoToast();
-      }
-    });
-
-    // 聚焦到撤销按钮以便键盘导航
-    setTimeout(() => undoButton.focus(), 100);
-
-    // 显示动画
-    setTimeout(() => {
-      this.undoToast.classList.add("show");
-    }, 10);
-
-    // 5秒后自动隐藏
-    this.undoTimeout = setTimeout(() => {
-      this.hideUndoToast();
-    }, 5000);
-  }
-
-  /**
-   * 处理撤销删除操作
-   */
-  async handleUndoDelete(domain) {
-    if (!this.whitelistManager) return;
-
+  isDomainAllowed(url) {
     try {
-      const success = await this.whitelistManager.addDomain(domain);
-
-      if (success) {
-        this.showFeedback(`已恢复域名: ${domain}`, "success");
-        this.hideUndoToast();
-      } else {
-        this.showFeedback("恢复失败，请重试", "error");
+      const domain = this.extractDomainFromURL(url);
+      if (!domain) {
+        return false;
       }
-    } catch (error) {
-      console.error("[SettingsPanel] Failed to undo delete:", error);
-      this.showFeedback("恢复失败，请重试", "error");
-    }
-  }
 
-  /**
-   * 隐藏撤销Toast
-   */
-  hideUndoToast() {
-    if (this.undoTimeout) {
-      clearTimeout(this.undoTimeout);
-      this.undoTimeout = null;
-    }
-
-    if (this.undoToast) {
-      this.undoToast.classList.remove("show");
-
-      setTimeout(() => {
-        if (this.undoToast && this.undoToast.parentNode) {
-          this.undoToast.parentNode.removeChild(this.undoToast);
+      // 使用包含匹配逻辑
+      for (const whitelistDomain of this.domains) {
+        if (domain.includes(whitelistDomain)) {
+          console.log(
+            `[WhitelistManager] Domain allowed: ${domain} (matched: ${whitelistDomain})`,
+          );
+          return true;
         }
-        this.undoToast = null;
-      }, 300);
-    }
-  }
-
-  /**
-   * 验证域名输入
-   */
-  validateDomainInput() {
-    if (!this.whitelistManager || !this.whitelistElements) return;
-
-    const { input } = this.whitelistElements;
-    const domain = input.value.trim();
-
-    if (!domain) {
-      this.showFeedback("", "");
-      return;
-    }
-
-    const cleanDomain = this.whitelistManager.validateAndCleanDomain(domain);
-    if (cleanDomain) {
-      this.showFeedback("域名格式有效", "success");
-    } else {
-      this.showFeedback("域名格式无效", "error");
-    }
-  }
-
-  /**
-   * 显示反馈信息
-   */
-  showFeedback(message, type = "") {
-    if (!this.whitelistElements) return;
-
-    const { feedback } = this.whitelistElements;
-    feedback.textContent = message;
-    feedback.className = `input-feedback ${type}`;
-
-    // 自动清除成功信息
-    if (type === "success") {
-      setTimeout(() => {
-        if (feedback.textContent === message) {
-          feedback.textContent = "";
-          feedback.className = "input-feedback";
-        }
-      }, 3000);
-    }
-  }
-
-  /**
-   * 刷新白名单UI显示
-   */
-  async refreshWhitelistUI() {
-    if (!this.whitelistManager || !this.whitelistElements) return;
-
-    try {
-      const domains = this.whitelistManager.getDomains();
-      const { domainList, domainCount, emptyState } = this.whitelistElements;
-
-      // 更新域名数量
-      domainCount.textContent = `${domains.length} 个域名`;
-
-      // 清空列表
-      domainList.innerHTML = "";
-
-      if (domains.length === 0) {
-        // 显示空状态
-        domainList.appendChild(emptyState);
-      } else {
-        // 显示域名列表
-        domains.forEach((domain) => {
-          const domainItem = this.createDomainItem(domain);
-          domainList.appendChild(domainItem);
-        });
-      }
-    } catch (error) {
-      console.error("[SettingsPanel] Failed to refresh whitelist UI:", error);
-    }
-  }
-
-  /**
-   * 创建域名列表项
-   */
-  createDomainItem(domain) {
-    const item = document.createElement("div");
-    item.className = "domain-item";
-    item.setAttribute("role", "listitem");
-
-    item.innerHTML = `
-      <span class="domain-text">${this.escapeHtml(domain)}</span>
-      <div class="domain-actions">
-        <button 
-          type="button" 
-          class="remove-domain-button" 
-          data-domain="${this.escapeHtml(domain)}"
-          aria-label="删除域名 ${this.escapeHtml(domain)}"
-        >
-          删除
-        </button>
-      </div>
-    `;
-
-    // 绑定删除事件
-    const removeButton = item.querySelector(".remove-domain-button");
-    removeButton.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const domainToRemove = removeButton.dataset.domain;
-      this.handleRemoveDomain(domainToRemove);
-    });
-
-    return item;
-  }
-
-  /**
-   * HTML转义函数
-   */
-  escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  /**
-   * 应用基础样式
-   */
-  applyBaseStyles() {
-    const styles = `
-            .tomato-monkey-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                background: rgba(0, 0, 0, 0.5);
-                z-index: 9999;
-                opacity: 0;
-                transition: opacity 0.3s ease;
-            }
-            
-            .tomato-monkey-overlay.show {
-                opacity: 1;
-            }
-            
-            .tomato-monkey-settings-panel {
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%) scale(0.9);
-                width: 90vw;
-                max-width: 800px;
-                height: 80vh;
-                max-height: 600px;
-                background: white;
-                border-radius: 12px;
-                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-                z-index: 10000;
-                display: flex;
-                flex-direction: column;
-                opacity: 0;
-                transition: all 0.3s ease;
-            }
-            
-            .tomato-monkey-settings-panel.show {
-                transform: translate(-50%, -50%) scale(1);
-                opacity: 1;
-            }
-            
-            .tomato-monkey-hidden {
-                display: none !important;
-            }
-        `;
-
-    GM_addStyle(styles);
-  }
-
-  /**
-   * 触发自定义事件
-   * @param {string} eventType - 事件类型
-   * @param {Object} detail - 事件详情
-   */
-  dispatchEvent(eventType, detail = {}) {
-    const event = new CustomEvent(`tomato-monkey-${eventType}`, {
-      detail,
-      bubbles: false,
-      cancelable: false,
-    });
-
-    document.dispatchEvent(event);
-  }
-
-  /**
-   * 销毁设置面板
-   */
-  destroy() {
-    // 清理撤销Toast
-    this.hideUndoToast();
-
-    if (this.panel) {
-      this.panel.remove();
-    }
-    if (this.overlay) {
-      this.overlay.remove();
-    }
-
-    this.tabs.clear();
-    console.log("[SettingsPanel] Destroyed");
-  }
-}
-
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.SettingsPanel = SettingsPanel;
-}
-    
-    /**
-     * TodoList - ToDo列表UI组件
-     */
-    /**
- * ToDo列表组件类
- */
-class TodoList {
-  constructor(container, taskManager) {
-    this.container = container;
-    this.taskManager = taskManager;
-    this.isInitialized = false;
-
-    // UI元素引用
-    this.inputField = null;
-    this.addButton = null;
-    this.taskList = null;
-    this.statsDisplay = null;
-    this.clearCompletedButton = null;
-
-    // 状态
-    this.tasks = [];
-    this.isLoading = false;
-
-    this.initialize();
-  }
-
-  /**
-   * 初始化组件
-   */
-  async initialize() {
-    if (this.isInitialized) {
-      return;
-    }
-
-    try {
-      this.createUI();
-      this.setupEventListeners();
-      this.bindTaskManager();
-      await this.loadTasks();
-
-      this.isInitialized = true;
-      console.log("[TodoList] Initialized successfully");
-    } catch (error) {
-      console.error("[TodoList] Failed to initialize:", error);
-      this.showError("初始化失败，请刷新页面重试");
-    }
-  }
-
-  /**
-   * 创建UI界面
-   */
-  createUI() {
-    this.container.innerHTML = `
-            <div class="todo-input-section">
-                <div class="input-group">
-                    <input 
-                        type="text" 
-                        id="todo-input" 
-                        class="todo-input" 
-                        placeholder="输入新任务..." 
-                        maxlength="200"
-                        aria-label="新任务输入"
-                    />
-                    <button 
-                        type="button" 
-                        id="add-task-btn" 
-                        class="add-task-button"
-                        title="添加任务 (Enter)"
-                        aria-label="添加新任务"
-                    >
-                        <span class="button-icon">+</span>
-                        <span class="button-text">添加</span>
-                    </button>
-                </div>
-                <div class="input-error-message hidden" id="input-error"></div>
-            </div>
-            
-            <div class="todo-stats-section">
-                <div class="stats-display" id="stats-display">
-                    <span class="stats-item">
-                        <span class="stats-label">总计:</span>
-                        <span class="stats-value" id="total-count">0</span>
-                    </span>
-                    <span class="stats-item">
-                        <span class="stats-label">待完成:</span>
-                        <span class="stats-value" id="pending-count">0</span>
-                    </span>
-                    <span class="stats-item">
-                        <span class="stats-label">已完成:</span>
-                        <span class="stats-value" id="completed-count">0</span>
-                    </span>
-                </div>
-                <button 
-                    type="button" 
-                    id="clear-completed-btn" 
-                    class="clear-completed-button hidden"
-                    title="清除所有已完成任务"
-                >
-                    清除已完成
-                </button>
-            </div>
-            
-            <div class="todo-list-section">
-                <div class="loading-indicator hidden" id="loading-indicator">
-                    <span class="loading-spinner"></span>
-                    <span>加载中...</span>
-                </div>
-                <div class="empty-state hidden" id="empty-state">
-                    <div class="empty-icon">📝</div>
-                    <h4>暂无任务</h4>
-                    <p>添加您的第一个任务来开始管理待办事项</p>
-                </div>
-                <ul class="task-list" id="task-list" role="list"></ul>
-            </div>
-        `;
-
-    // 获取UI元素引用
-    this.inputField = this.container.querySelector("#todo-input");
-    this.addButton = this.container.querySelector("#add-task-btn");
-    this.taskList = this.container.querySelector("#task-list");
-    this.statsDisplay = this.container.querySelector("#stats-display");
-    this.clearCompletedButton = this.container.querySelector(
-      "#clear-completed-btn",
-    );
-    this.loadingIndicator = this.container.querySelector("#loading-indicator");
-    this.emptyState = this.container.querySelector("#empty-state");
-    this.inputError = this.container.querySelector("#input-error");
-
-    // 统计元素
-    this.totalCount = this.container.querySelector("#total-count");
-    this.pendingCount = this.container.querySelector("#pending-count");
-    this.completedCount = this.container.querySelector("#completed-count");
-  }
-
-  /**
-   * 设置事件监听器
-   */
-  setupEventListeners() {
-    // 添加任务
-    this.addButton.addEventListener("click", () => this.addTask());
-
-    // 输入框回车添加任务
-    this.inputField.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        this.addTask();
-      }
-    });
-
-    // 输入验证
-    this.inputField.addEventListener("input", () => {
-      this.validateInput();
-      this.updateAddButtonState();
-    });
-
-    // 清除已完成任务
-    this.clearCompletedButton.addEventListener("click", () => {
-      this.clearCompletedTasks();
-    });
-
-    // 任务列表事件委托
-    this.taskList.addEventListener("click", (e) => {
-      this.handleTaskListClick(e);
-    });
-
-    // 任务列表键盘事件
-    this.taskList.addEventListener("keydown", (e) => {
-      this.handleTaskListKeydown(e);
-    });
-  }
-
-  /**
-   * 绑定TaskManager事件
-   */
-  bindTaskManager() {
-    if (!this.taskManager) return;
-
-    // 监听TaskManager事件
-    this.taskManager.addObserver((event, data) => {
-      this.handleTaskManagerEvent(event, data);
-    });
-  }
-
-  /**
-   * 处理TaskManager事件
-   * @param {string} event - 事件类型
-   * @param {Object} data - 事件数据
-   */
-  handleTaskManagerEvent(event, data) {
-    switch (event) {
-      case "taskCreated":
-      case "taskToggled":
-      case "taskDeleted":
-      case "completedTasksCleared":
-        this.loadTasks();
-        break;
-    }
-  }
-
-  /**
-   * 加载任务数据
-   */
-  async loadTasks() {
-    if (!this.taskManager || this.isLoading) return;
-
-    this.isLoading = true;
-    this.showLoading(true);
-
-    try {
-      this.tasks = this.taskManager.getAllTasks();
-      this.renderTaskList();
-      this.updateStats();
-      this.updateUI();
-    } catch (error) {
-      console.error("[TodoList] Failed to load tasks:", error);
-      this.showError("加载任务失败");
-    } finally {
-      this.isLoading = false;
-      this.showLoading(false);
-    }
-  }
-
-  /**
-   * 添加新任务
-   */
-  async addTask() {
-    const title = this.inputField.value.trim();
-
-    if (!this.validateTaskTitle(title)) {
-      return;
-    }
-
-    this.setButtonLoading(this.addButton, true);
-    this.clearError();
-
-    try {
-      await this.taskManager.createTask(title);
-      this.inputField.value = "";
-      this.updateAddButtonState();
-      this.inputField.focus();
-    } catch (error) {
-      console.error("[TodoList] Failed to add task:", error);
-      this.showError("添加任务失败，请重试");
-    } finally {
-      this.setButtonLoading(this.addButton, false);
-    }
-  }
-
-  /**
-   * 切换任务完成状态
-   * @param {string} taskId - 任务ID
-   */
-  async toggleTask(taskId) {
-    try {
-      await this.taskManager.toggleTaskCompletion(taskId);
-    } catch (error) {
-      console.error("[TodoList] Failed to toggle task:", error);
-      this.showError("操作失败，请重试");
-    }
-  }
-
-  /**
-   * 删除任务
-   * @param {string} taskId - 任务ID
-   * @param {string} taskTitle - 任务标题（用于确认）
-   */
-  async deleteTask(taskId, taskTitle) {
-    const confirmed = confirm(`确定要删除任务 "${taskTitle}" 吗？`);
-    if (!confirmed) return;
-
-    try {
-      await this.taskManager.deleteTask(taskId);
-    } catch (error) {
-      console.error("[TodoList] Failed to delete task:", error);
-      this.showError("删除失败，请重试");
-    }
-  }
-
-  /**
-   * 开始专注会话
-   * @param {string} taskId - 任务ID
-   * @param {string} taskTitle - 任务标题
-   */
-  async startFocusSession(taskId, taskTitle) {
-    try {
-      // 获取TimerManager实例
-      const timerManager = window.TimerManager ? window.TimerManager.getInstance() : null;
-      
-      if (!timerManager) {
-        this.showError("计时器模块未就绪，请刷新页面重试");
-        console.error("[TodoList] TimerManager not available");
-        return;
       }
 
-      // 检查是否已有计时器在运行
-      const timerState = timerManager.getTimerState();
-      if (timerState.status === "running") {
-        const confirmed = confirm("已有计时器在运行中，是否要停止当前计时器并开始新的专注会话？");
-        if (!confirmed) return;
-        
-        timerManager.stopTimer(true);
-      }
-
-      // 启动计时器 (默认25分钟) - 现在是异步调用，会在此时请求通知权限
-      const started = await timerManager.startTimer(taskId, taskTitle, 1500);
-      
-      if (started) {
-        console.log(`[TodoList] Started focus session for task: ${taskTitle}`);
-      } else {
-        this.showError("无法启动专注会话，请重试");
-        console.error("[TodoList] Failed to start timer");
-      }
-
+      return false;
     } catch (error) {
-      console.error("[TodoList] Failed to start focus session:", error);
-      this.showError("启动专注会话失败，请重试");
+      console.error("[WhitelistManager] Failed to check domain:", error);
+      return false;
     }
   }
 
   /**
-   * 清除所有已完成任务
+   * 获取所有白名单域名
+   * @returns {Array<string>} 域名数组
    */
-  async clearCompletedTasks() {
-    const completedCount = this.tasks.filter((task) => task.isCompleted).length;
-    if (completedCount === 0) return;
+  getDomains() {
+    return Array.from(this.domains).sort();
+  }
 
-    const confirmed = confirm(`确定要清除 ${completedCount} 个已完成任务吗？`);
-    if (!confirmed) return;
-
+  /**
+   * 清空所有白名单域名
+   * @returns {boolean} 清空是否成功
+   */
+  async clearDomains() {
     try {
-      await this.taskManager.clearCompletedTasks();
-    } catch (error) {
-      console.error("[TodoList] Failed to clear completed tasks:", error);
-      this.showError("清除失败，请重试");
-    }
-  }
+      this.domains.clear();
+      const success = await this.saveToStorage();
 
-  /**
-   * 渲染任务列表
-   */
-  renderTaskList() {
-    if (this.tasks.length === 0) {
-      this.taskList.innerHTML = "";
-      return;
-    }
-
-    const taskItems = this.tasks.map((task) => this.createTaskElement(task));
-    this.taskList.innerHTML = taskItems.join("");
-  }
-
-  /**
-   * 创建任务元素HTML
-   * @param {Task} task - 任务对象
-   * @returns {string} HTML字符串
-   */
-  createTaskElement(task) {
-    const completedClass = task.isCompleted ? "completed" : "";
-    const checkedAttr = task.isCompleted ? "checked" : "";
-    const createdDate = new Date(task.createdAt).toLocaleDateString();
-    const completedDate = task.completedAt
-      ? new Date(task.completedAt).toLocaleDateString()
-      : "";
-
-    return `
-            <li class="task-item ${completedClass}" data-task-id="${task.id}" role="listitem">
-                <div class="task-content">
-                    <label class="task-checkbox-label">
-                        <input 
-                            type="checkbox" 
-                            class="task-checkbox" 
-                            ${checkedAttr}
-                            aria-label="标记任务为${task.isCompleted ? "未完成" : "已完成"}"
-                        />
-                        <span class="checkbox-custom"></span>
-                    </label>
-                    
-                    <div class="task-details">
-                        <div class="task-title">${task.title}</div>
-                        <div class="task-meta">
-                            <span class="task-date">创建于 ${createdDate}</span>
-                            ${task.isCompleted ? `<span class="task-completed-date">完成于 ${completedDate}</span>` : ""}
-                            ${task.pomodoroCount > 0 ? `<span class="pomodoro-count">🍅 ${task.pomodoroCount}</span>` : ""}
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="task-actions">
-                    ${!task.isCompleted ? `
-                        <button 
-                            type="button" 
-                            class="start-focus-button" 
-                            title="开始专注"
-                            aria-label="开始专注: ${task.title}"
-                        >
-                            🍅
-                        </button>
-                    ` : ""}
-                    <button 
-                        type="button" 
-                        class="delete-task-button" 
-                        title="删除任务"
-                        aria-label="删除任务: ${task.title}"
-                    >
-                        🗑️
-                    </button>
-                </div>
-            </li>
-        `;
-  }
-
-  /**
-   * 处理任务列表点击事件
-   * @param {Event} e - 点击事件
-   */
-  handleTaskListClick(e) {
-    const taskItem = e.target.closest(".task-item");
-    if (!taskItem) return;
-
-    const taskId = taskItem.dataset.taskId;
-
-    // 复选框点击
-    if (e.target.classList.contains("task-checkbox")) {
-      this.toggleTask(taskId);
-    }
-
-    // 开始专注按钮点击
-    else if (e.target.classList.contains("start-focus-button")) {
-      const taskTitle = taskItem.querySelector(".task-title").textContent;
-      this.startFocusSession(taskId, taskTitle);
-    }
-
-    // 删除按钮点击
-    else if (e.target.classList.contains("delete-task-button")) {
-      const taskTitle = taskItem.querySelector(".task-title").textContent;
-      this.deleteTask(taskId, taskTitle);
-    }
-  }
-
-  /**
-   * 处理任务列表键盘事件
-   * @param {KeyboardEvent} e - 键盘事件
-   */
-  handleTaskListKeydown(e) {
-    const taskItem = e.target.closest(".task-item");
-    if (!taskItem) return;
-
-    const taskId = taskItem.dataset.taskId;
-
-    if (e.target.classList.contains("delete-task-button")) {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        const taskTitle = taskItem.querySelector(".task-title").textContent;
-        this.deleteTask(taskId, taskTitle);
+      if (success) {
+        console.log("[WhitelistManager] All domains cleared");
+        this.dispatchChangeEvent("domainsCleared");
+        return true;
       }
+
+      return false;
+    } catch (error) {
+      console.error("[WhitelistManager] Failed to clear domains:", error);
+      return false;
     }
   }
 
   /**
-   * 更新统计信息
+   * 验证并清理域名格式
+   * @param {string} domain - 原始域名
+   * @returns {string|null} 清理后的域名，无效时返回null
    */
-  updateStats() {
-    const stats = this.taskManager
-      ? this.taskManager.getStatistics()
-      : {
-          total: 0,
-          pending: 0,
-          completed: 0,
-        };
+  validateAndCleanDomain(domain) {
+    if (typeof domain !== "string") {
+      return null;
+    }
 
-    this.totalCount.textContent = stats.total;
-    this.pendingCount.textContent = stats.pending;
-    this.completedCount.textContent = stats.completed;
+    // 清理空白字符和转换为小写
+    const cleaned = domain.trim().toLowerCase();
+
+    if (cleaned === "") {
+      return null;
+    }
+
+    // 移除协议前缀
+    const withoutProtocol = cleaned.replace(/^https?:\/\//, "");
+
+    // 移除路径、查询参数和片段
+    const domainOnly = withoutProtocol
+      .split("/")[0]
+      .split("?")[0]
+      .split("#")[0];
+
+    // 移除端口号
+    const withoutPort = domainOnly.split(":")[0];
+
+    // 基础域名格式验证
+    if (!this.isValidDomainFormat(withoutPort)) {
+      return null;
+    }
+
+    return withoutPort;
   }
 
   /**
-   * 更新UI状态
+   * 检查域名格式是否有效
+   * @param {string} domain - 域名
+   * @returns {boolean} 格式是否有效
    */
-  updateUI() {
-    const hasCompletedTasks = this.tasks.some((task) => task.isCompleted);
-    const hasTasks = this.tasks.length > 0;
-
-    // 显示/隐藏清除已完成按钮
-    this.clearCompletedButton.classList.toggle("hidden", !hasCompletedTasks);
-
-    // 显示/隐藏空状态
-    this.emptyState.classList.toggle("hidden", hasTasks);
-    this.taskList.classList.toggle("hidden", !hasTasks);
-
-    this.updateAddButtonState();
-  }
-
-  /**
-   * 更新添加按钮状态
-   */
-  updateAddButtonState() {
-    const hasText = this.inputField.value.trim().length > 0;
-    this.addButton.disabled = !hasText;
-  }
-
-  /**
-   * 验证任务标题
-   * @param {string} title - 任务标题
-   * @returns {boolean} 验证是否通过
-   */
-  validateTaskTitle(title) {
-    if (!title || title.length === 0) {
-      this.showError("请输入任务内容");
-      this.inputField.focus();
+  isValidDomainFormat(domain) {
+    // 空字符串检查
+    if (!domain || domain.length === 0) {
       return false;
     }
 
-    if (title.length > 200) {
-      this.showError("任务内容不能超过200个字符");
-      this.inputField.focus();
+    // 长度检查
+    if (domain.length > 253) {
+      return false;
+    }
+
+    // 基础字符检查：只允许字母、数字、点号和连字符
+    const domainRegex = /^[a-z0-9.-]+$/;
+    if (!domainRegex.test(domain)) {
+      return false;
+    }
+
+    // 检查是否以点号开始或结束
+    if (domain.startsWith(".") || domain.endsWith(".")) {
+      return false;
+    }
+
+    // 检查是否包含连续的点号
+    if (domain.includes("..")) {
+      return false;
+    }
+
+    // 检查各部分长度（每个标签不能超过63个字符）
+    const labels = domain.split(".");
+    for (const label of labels) {
+      if (label.length === 0 || label.length > 63) {
+        return false;
+      }
+
+      // 标签不能以连字符开始或结束
+      if (label.startsWith("-") || label.endsWith("-")) {
+        return false;
+      }
+
+      // 检查标签是否只包含连字符（无效）
+      if (label === "-") {
+        return false;
+      }
+    }
+
+    // 至少要有一个点号（排除纯localhost等）
+    if (!domain.includes(".")) {
       return false;
     }
 
@@ -3976,96 +2454,106 @@ class TodoList {
   }
 
   /**
-   * 验证输入
+   * 从URL提取域名
+   * @param {string} url - URL字符串
+   * @returns {string|null} 域名，提取失败返回null
    */
-  validateInput() {
-    const value = this.inputField.value;
+  extractDomainFromURL(url) {
+    try {
+      // 如果不是完整URL，假设是域名
+      if (!url.includes("://")) {
+        return this.validateAndCleanDomain(url);
+      }
 
-    if (value.length > 200) {
-      this.showError("任务内容不能超过200个字符");
-    } else {
-      this.clearError();
+      const urlObj = new URL(url);
+      return urlObj.hostname.toLowerCase();
+    } catch (error) {
+      // URL构造失败，尝试手动解析
+      const cleaned = url.replace(/^https?:\/\//, "");
+      const domain = cleaned.split("/")[0].split("?")[0].split("#")[0];
+      return this.validateAndCleanDomain(domain);
     }
   }
 
   /**
-   * 显示错误信息
-   * @param {string} message - 错误信息
+   * 保存白名单数据到存储
+   * @returns {boolean} 保存是否成功
+   * @private
    */
-  showError(message) {
-    this.inputError.textContent = message;
-    this.inputError.classList.remove("hidden");
-    this.inputField.classList.add("error");
-  }
+  async saveToStorage() {
+    if (!this.storageManager) {
+      console.error("[WhitelistManager] StorageManager not initialized");
+      return false;
+    }
 
-  /**
-   * 清除错误信息
-   */
-  clearError() {
-    this.inputError.classList.add("hidden");
-    this.inputField.classList.remove("error");
-  }
+    try {
+      // 获取当前设置
+      const settings = await this.storageManager.loadSettings();
 
-  /**
-   * 显示/隐藏加载状态
-   * @param {boolean} show - 是否显示
-   */
-  showLoading(show) {
-    this.loadingIndicator.classList.toggle("hidden", !show);
-  }
+      // 更新白名单
+      settings.whitelist = Array.from(this.domains);
 
-  /**
-   * 设置按钮加载状态
-   * @param {HTMLElement} button - 按钮元素
-   * @param {boolean} loading - 是否加载中
-   */
-  setButtonLoading(button, loading) {
-    button.disabled = loading;
-    button.classList.toggle("loading", loading);
-
-    if (loading) {
-      button.querySelector(".button-text").textContent = "添加中...";
-    } else {
-      button.querySelector(".button-text").textContent = "添加";
+      // 保存设置
+      return await this.storageManager.saveSettings(settings);
+    } catch (error) {
+      console.error("[WhitelistManager] Failed to save to storage:", error);
+      return false;
     }
   }
 
   /**
-   * 获取任务统计
+   * 触发白名单变更事件
+   * @param {string} eventType - 事件类型
+   * @param {Object} detail - 事件详情
+   * @private
+   */
+  dispatchChangeEvent(eventType, detail = {}) {
+    // 检查是否在浏览器环境中
+    if (
+      typeof window !== "undefined" &&
+      typeof document !== "undefined" &&
+      typeof CustomEvent !== "undefined"
+    ) {
+      try {
+        const event = new CustomEvent(`tomato-monkey-whitelist-${eventType}`, {
+          detail: {
+            ...detail,
+            domains: this.getDomains(),
+            timestamp: Date.now(),
+          },
+          bubbles: false,
+          cancelable: false,
+        });
+
+        document.dispatchEvent(event);
+      } catch (error) {
+        console.warn("[WhitelistManager] Failed to dispatch event:", error);
+      }
+    }
+  }
+
+  /**
+   * 获取白名单统计信息
    * @returns {Object} 统计信息
    */
   getStats() {
-    return this.taskManager ? this.taskManager.getStatistics() : null;
-  }
-
-  /**
-   * 刷新组件
-   */
-  async refresh() {
-    await this.loadTasks();
-  }
-
-  /**
-   * 销毁组件
-   */
-  destroy() {
-    if (this.taskManager) {
-      this.taskManager.removeObserver(this.handleTaskManagerEvent);
-    }
-
-    if (this.container) {
-      this.container.innerHTML = "";
-    }
-
-    console.log("[TodoList] Destroyed");
+    return {
+      totalDomains: this.domains.size,
+      domains: this.getDomains(),
+      lastModified: Date.now(),
+    };
   }
 }
+
+// 创建单例实例
+const whitelistManager = new WhitelistManager();
 
 // 如果在浏览器环境中，将其添加到全局对象
 if (typeof window !== "undefined") {
-  window.TodoList = TodoList;
+  window.WhitelistManager = WhitelistManager;
+  window.whitelistManager = whitelistManager;
 }
-    
+
     /**
      * FocusPage - 专注页面UI组件
      */
@@ -5134,158 +3622,2301 @@ if (typeof window !== "undefined") {
 if (typeof window !== "undefined") {
   window.FocusPage = FocusPage;
 }
+
+    /**
+     * SettingsPanel - 设置面板UI组件
+     */
+    /**
+ * 设置面板类
+ */
+class SettingsPanel {
+  constructor() {
+    this.isVisible = false;
+    this.activeTab = "todo"; // 默认激活ToDo标签页
+    this.panel = null;
+    this.contentArea = null;
+    this.tabs = new Map(); // 存储标签页组件
+
+    // 白名单相关
+    this.whitelistManager = null;
+    this.whitelistElements = null;
+    this.undoToast = null;
+    this.undoTimeout = null;
+
+    // 标签页配置
+    this.tabConfig = [
+      {
+        id: "todo",
+        name: "ToDo列表",
+        icon: "✅",
+        component: null, // 将在后续设置
+      },
+      {
+        id: "whitelist",
+        name: "网站白名单",
+        icon: "🌐",
+        component: null,
+      },
+      {
+        id: "statistics",
+        name: "效率统计",
+        icon: "📊",
+        component: null,
+      },
+    ];
+
+    this.initialize();
+  }
+
+  /**
+   * 初始化设置面板
+   */
+  async initialize() {
+    this.createPanelStructure();
+    this.createNavigation();
+    this.createContentArea();
+    this.setupEventListeners();
+    await this.initializeWhitelist(); // 初始化白名单功能
+    this.activateTab(this.activeTab);
+
+    console.log("[SettingsPanel] Initialized successfully");
+  }
+
+  /**
+   * 创建面板基础结构
+   */
+  createPanelStructure() {
+    // 创建遮罩层
+    const overlay = document.createElement("div");
+    overlay.id = "tomato-monkey-overlay";
+    overlay.className = "tomato-monkey-overlay tomato-monkey-hidden";
+
+    // 创建主面板
+    this.panel = document.createElement("div");
+    this.panel.id = "tomato-monkey-settings-panel";
+    this.panel.className = "tomato-monkey-settings-panel tomato-monkey-hidden";
+
+    // 设置基础样式
+    this.applyBaseStyles();
+
+    // 创建面板头部
+    const header = document.createElement("div");
+    header.className = "settings-header";
+    header.innerHTML = `
+            <div class="header-title">
+                <span class="header-icon">🍅</span>
+                <h2>TomatoMonkey 设置</h2>
+            </div>
+            <button class="close-button" type="button" title="关闭设置面板 (Ctrl+Shift+T)">
+                ✕
+            </button>
+        `;
+
+    // 创建面板主体
+    const body = document.createElement("div");
+    body.className = "settings-body";
+
+    // 创建左侧导航区域
+    const navigation = document.createElement("nav");
+    navigation.className = "settings-navigation";
+
+    // 创建右侧内容区域
+    this.contentArea = document.createElement("main");
+    this.contentArea.className = "settings-content";
+
+    // 组装面板结构
+    body.appendChild(navigation);
+    body.appendChild(this.contentArea);
+    this.panel.appendChild(header);
+    this.panel.appendChild(body);
+
+    // 添加到页面
+    document.body.appendChild(overlay);
+    document.body.appendChild(this.panel);
+
+    // 存储引用
+    this.overlay = overlay;
+    this.navigation = navigation;
+    this.headerElement = header;
+  }
+
+  /**
+   * 创建导航标签页
+   */
+  createNavigation() {
+    const tabList = document.createElement("ul");
+    tabList.className = "tab-list";
+    tabList.setAttribute("role", "tablist");
+
+    this.tabConfig.forEach((tab, index) => {
+      const tabItem = document.createElement("li");
+      tabItem.className = "tab-item";
+
+      const tabButton = document.createElement("button");
+      tabButton.type = "button";
+      tabButton.className = `tab-button ${tab.id === this.activeTab ? "active" : ""}`;
+      tabButton.setAttribute("role", "tab");
+      tabButton.setAttribute("aria-controls", `${tab.id}-panel`);
+      tabButton.setAttribute(
+        "aria-selected",
+        tab.id === this.activeTab ? "true" : "false",
+      );
+      tabButton.setAttribute(
+        "tabindex",
+        tab.id === this.activeTab ? "0" : "-1",
+      );
+      tabButton.dataset.tabId = tab.id;
+
+      tabButton.innerHTML = `
+                <span class="tab-icon">${tab.icon}</span>
+                <span class="tab-name">${tab.name}</span>
+            `;
+
+      // 添加事件监听
+      tabButton.addEventListener("click", (e) => {
+        this.activateTab(tab.id);
+      });
+
+      // 键盘导航支持
+      tabButton.addEventListener("keydown", (e) => {
+        this.handleTabKeydown(e, index);
+      });
+
+      tabItem.appendChild(tabButton);
+      tabList.appendChild(tabItem);
+    });
+
+    this.navigation.appendChild(tabList);
+    this.tabButtons = this.navigation.querySelectorAll(".tab-button");
+  }
+
+  /**
+   * 创建内容区域
+   */
+  createContentArea() {
+    // 为每个标签页创建内容面板
+    this.tabConfig.forEach((tab) => {
+      const contentPanel = document.createElement("div");
+      contentPanel.id = `${tab.id}-panel`;
+      contentPanel.className = `content-panel ${tab.id === this.activeTab ? "active" : "hidden"}`;
+      contentPanel.setAttribute("role", "tabpanel");
+      contentPanel.setAttribute("aria-labelledby", `${tab.id}-tab`);
+
+      // 根据标签页类型创建不同的内容
+      switch (tab.id) {
+        case "todo":
+          contentPanel.innerHTML = `
+                        <div class="panel-header">
+                            <h3>任务管理</h3>
+                            <p>管理您的待办事项列表</p>
+                        </div>
+                        <div id="todo-container" class="todo-container">
+                            <!-- ToDo List组件将插入这里 -->
+                        </div>
+                    `;
+          break;
+
+        case "whitelist":
+          contentPanel.innerHTML = `
+                        <div class="panel-header">
+                            <h3>网站白名单</h3>
+                            <p>设置专注期间允许访问的网站（使用包含匹配）</p>
+                        </div>
+                        <div class="whitelist-container">
+                            <div class="whitelist-input-section">
+                                <div class="input-group">
+                                    <input 
+                                        type="text" 
+                                        id="whitelist-domain-input" 
+                                        class="domain-input" 
+                                        placeholder="输入域名，如：google.com"
+                                        aria-label="域名输入"
+                                    />
+                                    <button 
+                                        type="button" 
+                                        id="whitelist-add-button" 
+                                        class="add-domain-button"
+                                        aria-label="添加域名到白名单"
+                                    >
+                                        添加域名
+                                    </button>
+                                </div>
+                                <div class="input-feedback" id="whitelist-input-feedback" role="alert" aria-live="polite"></div>
+                            </div>
+                            <div class="whitelist-list-section">
+                                <div class="list-header">
+                                    <h4>已添加的域名</h4>
+                                    <span class="domain-count" id="whitelist-domain-count">0 个域名</span>
+                                </div>
+                                <div class="domain-list" id="whitelist-domain-list" role="list">
+                                    <div class="empty-state" id="whitelist-empty-state">
+                                        <div class="empty-icon">🌐</div>
+                                        <p>暂无白名单域名</p>
+                                        <small>添加域名后，专注期间将允许访问包含这些域名的网站</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+          break;
+
+        case "statistics":
+          contentPanel.innerHTML = `
+                        <div class="panel-header">
+                            <h3>效率统计</h3>
+                            <p>查看您的专注时间和任务完成统计</p>
+                        </div>
+                        <div class="placeholder-content">
+                            <div class="placeholder-icon">📊</div>
+                            <p>统计功能即将上线</p>
+                        </div>
+                    `;
+          break;
+      }
+
+      this.contentArea.appendChild(contentPanel);
+      this.tabs.set(tab.id, contentPanel);
+    });
+  }
+
+  /**
+   * 设置事件监听器
+   */
+  setupEventListeners() {
+    // 关闭按钮
+    const closeButton = this.headerElement.querySelector(".close-button");
+    closeButton.addEventListener("click", () => this.hide());
+
+    // 遮罩层点击关闭
+    this.overlay.addEventListener("click", () => this.hide());
+
+    // ESC键关闭
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.isVisible) {
+        this.hide();
+      }
+    });
+
+    // 防止面板内点击冒泡到遮罩层
+    this.panel.addEventListener("click", (e) => e.stopPropagation());
+  }
+
+  /**
+   * 处理标签页键盘导航
+   * @param {KeyboardEvent} e - 键盘事件
+   * @param {number} currentIndex - 当前标签页索引
+   */
+  handleTabKeydown(e, currentIndex) {
+    let targetIndex = currentIndex;
+
+    switch (e.key) {
+      case "ArrowLeft":
+      case "ArrowUp":
+        targetIndex =
+          currentIndex > 0 ? currentIndex - 1 : this.tabConfig.length - 1;
+        e.preventDefault();
+        break;
+
+      case "ArrowRight":
+      case "ArrowDown":
+        targetIndex =
+          currentIndex < this.tabConfig.length - 1 ? currentIndex + 1 : 0;
+        e.preventDefault();
+        break;
+
+      case "Home":
+        targetIndex = 0;
+        e.preventDefault();
+        break;
+
+      case "End":
+        targetIndex = this.tabConfig.length - 1;
+        e.preventDefault();
+        break;
+
+      case "Enter":
+      case " ":
+        this.activateTab(this.tabConfig[currentIndex].id);
+        e.preventDefault();
+        break;
+    }
+
+    if (targetIndex !== currentIndex) {
+      this.tabButtons[targetIndex].focus();
+    }
+  }
+
+  /**
+   * 激活指定标签页
+   * @param {string} tabId - 标签页ID
+   */
+  activateTab(tabId) {
+    if (!this.tabs.has(tabId)) {
+      console.warn(`[SettingsPanel] Tab not found: ${tabId}`);
+      return;
+    }
+
+    const previousTab = this.activeTab;
+    this.activeTab = tabId;
+
+    // 更新标签页按钮状态
+    this.tabButtons.forEach((button) => {
+      const isActive = button.dataset.tabId === tabId;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+      button.setAttribute("tabindex", isActive ? "0" : "-1");
+    });
+
+    // 更新内容面板显示
+    this.tabs.forEach((panel, id) => {
+      const isActive = id === tabId;
+      panel.classList.toggle("active", isActive);
+      panel.classList.toggle("hidden", !isActive);
+    });
+
+    console.log(`[SettingsPanel] Activated tab: ${tabId}`);
+
+    // 触发标签页切换事件
+    this.dispatchEvent("tabChanged", {
+      activeTab: tabId,
+      previousTab,
+      panel: this.tabs.get(tabId),
+    });
+  }
+
+  /**
+   * 显示设置面板
+   */
+  show() {
+    if (this.isVisible) return;
+
+    this.overlay.classList.remove("tomato-monkey-hidden");
+    this.panel.classList.remove("tomato-monkey-hidden");
+
+    // 添加显示动画类
+    setTimeout(() => {
+      this.overlay.classList.add("show");
+      this.panel.classList.add("show");
+    }, 10);
+
+    // 聚焦到活动标签页
+    const activeTabButton = this.navigation.querySelector(".tab-button.active");
+    if (activeTabButton) {
+      activeTabButton.focus();
+    }
+
+    this.isVisible = true;
+    console.log("[SettingsPanel] Panel shown");
+
+    this.dispatchEvent("panelShown");
+  }
+
+  /**
+   * 隐藏设置面板
+   */
+  hide() {
+    if (!this.isVisible) return;
+
+    this.overlay.classList.remove("show");
+    this.panel.classList.remove("show");
+
+    // 等待动画结束后完全隐藏
+    setTimeout(() => {
+      this.overlay.classList.add("tomato-monkey-hidden");
+      this.panel.classList.add("tomato-monkey-hidden");
+    }, 300);
+
+    this.isVisible = false;
+    console.log("[SettingsPanel] Panel hidden");
+
+    this.dispatchEvent("panelHidden");
+  }
+
+  /**
+   * 切换设置面板显示状态
+   */
+  toggle() {
+    if (this.isVisible) {
+      this.hide();
+    } else {
+      this.show();
+    }
+  }
+
+  /**
+   * 获取指定标签页的容器元素
+   * @param {string} tabId - 标签页ID
+   * @returns {HTMLElement|null} 容器元素
+   */
+  getTabContainer(tabId) {
+    return this.tabs.get(tabId) || null;
+  }
+
+  /**
+   * 注册标签页组件
+   * @param {string} tabId - 标签页ID
+   * @param {Object} component - 组件实例
+   */
+  registerTabComponent(tabId, component) {
+    const tabConfig = this.tabConfig.find((tab) => tab.id === tabId);
+    if (tabConfig) {
+      tabConfig.component = component;
+      console.log(`[SettingsPanel] Registered component for tab: ${tabId}`);
+    }
+  }
+
+  /**
+   * 初始化白名单功能
+   */
+  async initializeWhitelist() {
+    try {
+      // 初始化 WhitelistManager（需要确保 WhitelistManager 和 StorageManager 已加载）
+      if (
+        typeof window.whitelistManager !== "undefined" &&
+        typeof window.storageManager !== "undefined"
+      ) {
+        this.whitelistManager = window.whitelistManager;
+        await this.whitelistManager.initialize(window.storageManager);
+
+        // 设置DOM元素引用
+        this.setupWhitelistElements();
+
+        // 绑定事件处理器
+        this.setupWhitelistEventListeners();
+
+        // 加载并显示现有域名
+        await this.refreshWhitelistUI();
+
+        console.log("[SettingsPanel] Whitelist initialized successfully");
+      } else {
+        console.warn(
+          "[SettingsPanel] WhitelistManager or StorageManager not available",
+        );
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to initialize whitelist:", error);
+    }
+  }
+
+  /**
+   * 设置白名单DOM元素引用
+   */
+  setupWhitelistElements() {
+    const whitelistPanel = this.tabs.get("whitelist");
+    if (!whitelistPanel) return;
+
+    this.whitelistElements = {
+      input: whitelistPanel.querySelector("#whitelist-domain-input"),
+      addButton: whitelistPanel.querySelector("#whitelist-add-button"),
+      feedback: whitelistPanel.querySelector("#whitelist-input-feedback"),
+      domainList: whitelistPanel.querySelector("#whitelist-domain-list"),
+      domainCount: whitelistPanel.querySelector("#whitelist-domain-count"),
+      emptyState: whitelistPanel.querySelector("#whitelist-empty-state"),
+    };
+  }
+
+  /**
+   * 设置白名单事件监听器
+   */
+  setupWhitelistEventListeners() {
+    if (!this.whitelistElements) return;
+
+    const { input, addButton } = this.whitelistElements;
+
+    // 添加域名按钮点击事件
+    addButton.addEventListener("click", () => this.handleAddDomain());
+
+    // 输入框回车事件
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        this.handleAddDomain();
+      }
+    });
+
+    // 输入实时验证
+    input.addEventListener("input", () => this.validateDomainInput());
+
+    // 监听白名单变更事件
+    document.addEventListener("tomato-monkey-whitelist-domainAdded", () =>
+      this.refreshWhitelistUI(),
+    );
+    document.addEventListener("tomato-monkey-whitelist-domainRemoved", () =>
+      this.refreshWhitelistUI(),
+    );
+    document.addEventListener("tomato-monkey-whitelist-domainsCleared", () =>
+      this.refreshWhitelistUI(),
+    );
+  }
+
+  /**
+   * 处理添加域名操作
+   */
+  async handleAddDomain() {
+    if (!this.whitelistManager || !this.whitelistElements) return;
+
+    const { input, addButton, feedback } = this.whitelistElements;
+    const domain = input.value.trim();
+
+    if (!domain) {
+      this.showFeedback("请输入域名", "error");
+      return;
+    }
+
+    // 禁用按钮防止重复提交
+    addButton.disabled = true;
+    addButton.classList.add("loading");
+
+    try {
+      const success = await this.whitelistManager.addDomain(domain);
+
+      if (success) {
+        input.value = "";
+        this.showFeedback("域名添加成功", "success");
+        input.focus();
+      } else {
+        this.showFeedback("域名格式无效或已存在", "error");
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to add domain:", error);
+      this.showFeedback("添加失败，请重试", "error");
+    } finally {
+      addButton.disabled = false;
+      addButton.classList.remove("loading");
+    }
+  }
+
+  /**
+   * 处理删除域名操作（带撤销确认）
+   */
+  async handleRemoveDomain(domain) {
+    if (!this.whitelistManager) return;
+
+    try {
+      const success = await this.whitelistManager.removeDomain(domain);
+
+      if (success) {
+        this.showUndoToast(domain);
+      } else {
+        this.showFeedback("删除失败，请重试", "error");
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to remove domain:", error);
+      this.showFeedback("删除失败，请重试", "error");
+    }
+  }
+
+  /**
+   * 显示撤销Toast
+   */
+  showUndoToast(deletedDomain) {
+    // 清除现有的撤销Toast和定时器
+    this.hideUndoToast();
+
+    // 创建Toast元素
+    this.undoToast = document.createElement("div");
+    this.undoToast.className = "undo-toast";
+    this.undoToast.setAttribute("role", "alert");
+    this.undoToast.setAttribute("aria-live", "polite");
+
+    this.undoToast.innerHTML = `
+      <div class="undo-toast-content">
+        <span class="undo-message">已删除域名: ${this.escapeHtml(deletedDomain)}</span>
+        <button type="button" class="undo-button" aria-label="撤销删除域名 ${this.escapeHtml(deletedDomain)}">
+          撤销
+        </button>
+        <button type="button" class="toast-close-button" aria-label="关闭撤销提示">
+          ✕
+        </button>
+      </div>
+      <div class="undo-progress" aria-hidden="true"></div>
+    `;
+
+    // 添加到页面
+    document.body.appendChild(this.undoToast);
+
+    // 绑定撤销按钮事件
+    const undoButton = this.undoToast.querySelector(".undo-button");
+    const closeButton = this.undoToast.querySelector(".toast-close-button");
+
+    undoButton.addEventListener("click", () =>
+      this.handleUndoDelete(deletedDomain),
+    );
+    closeButton.addEventListener("click", () => this.hideUndoToast());
+
+    // 键盘支持
+    this.undoToast.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        this.hideUndoToast();
+      }
+    });
+
+    // 聚焦到撤销按钮以便键盘导航
+    setTimeout(() => undoButton.focus(), 100);
+
+    // 显示动画
+    setTimeout(() => {
+      this.undoToast.classList.add("show");
+    }, 10);
+
+    // 5秒后自动隐藏
+    this.undoTimeout = setTimeout(() => {
+      this.hideUndoToast();
+    }, 5000);
+  }
+
+  /**
+   * 处理撤销删除操作
+   */
+  async handleUndoDelete(domain) {
+    if (!this.whitelistManager) return;
+
+    try {
+      const success = await this.whitelistManager.addDomain(domain);
+
+      if (success) {
+        this.showFeedback(`已恢复域名: ${domain}`, "success");
+        this.hideUndoToast();
+      } else {
+        this.showFeedback("恢复失败，请重试", "error");
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to undo delete:", error);
+      this.showFeedback("恢复失败，请重试", "error");
+    }
+  }
+
+  /**
+   * 隐藏撤销Toast
+   */
+  hideUndoToast() {
+    if (this.undoTimeout) {
+      clearTimeout(this.undoTimeout);
+      this.undoTimeout = null;
+    }
+
+    if (this.undoToast) {
+      this.undoToast.classList.remove("show");
+
+      setTimeout(() => {
+        if (this.undoToast && this.undoToast.parentNode) {
+          this.undoToast.parentNode.removeChild(this.undoToast);
+        }
+        this.undoToast = null;
+      }, 300);
+    }
+  }
+
+  /**
+   * 验证域名输入
+   */
+  validateDomainInput() {
+    if (!this.whitelistManager || !this.whitelistElements) return;
+
+    const { input } = this.whitelistElements;
+    const domain = input.value.trim();
+
+    if (!domain) {
+      this.showFeedback("", "");
+      return;
+    }
+
+    const cleanDomain = this.whitelistManager.validateAndCleanDomain(domain);
+    if (cleanDomain) {
+      this.showFeedback("域名格式有效", "success");
+    } else {
+      this.showFeedback("域名格式无效", "error");
+    }
+  }
+
+  /**
+   * 显示反馈信息
+   */
+  showFeedback(message, type = "") {
+    if (!this.whitelistElements) return;
+
+    const { feedback } = this.whitelistElements;
+    feedback.textContent = message;
+    feedback.className = `input-feedback ${type}`;
+
+    // 自动清除成功信息
+    if (type === "success") {
+      setTimeout(() => {
+        if (feedback.textContent === message) {
+          feedback.textContent = "";
+          feedback.className = "input-feedback";
+        }
+      }, 3000);
+    }
+  }
+
+  /**
+   * 刷新白名单UI显示
+   */
+  async refreshWhitelistUI() {
+    if (!this.whitelistManager || !this.whitelistElements) return;
+
+    try {
+      const domains = this.whitelistManager.getDomains();
+      const { domainList, domainCount, emptyState } = this.whitelistElements;
+
+      // 更新域名数量
+      domainCount.textContent = `${domains.length} 个域名`;
+
+      // 清空列表
+      domainList.innerHTML = "";
+
+      if (domains.length === 0) {
+        // 显示空状态
+        domainList.appendChild(emptyState);
+      } else {
+        // 显示域名列表
+        domains.forEach((domain) => {
+          const domainItem = this.createDomainItem(domain);
+          domainList.appendChild(domainItem);
+        });
+      }
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to refresh whitelist UI:", error);
+    }
+  }
+
+  /**
+   * 创建域名列表项
+   */
+  createDomainItem(domain) {
+    const item = document.createElement("div");
+    item.className = "domain-item";
+    item.setAttribute("role", "listitem");
+
+    item.innerHTML = `
+      <span class="domain-text">${this.escapeHtml(domain)}</span>
+      <div class="domain-actions">
+        <button 
+          type="button" 
+          class="remove-domain-button" 
+          data-domain="${this.escapeHtml(domain)}"
+          aria-label="删除域名 ${this.escapeHtml(domain)}"
+        >
+          删除
+        </button>
+      </div>
+    `;
+
+    // 绑定删除事件
+    const removeButton = item.querySelector(".remove-domain-button");
+    removeButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const domainToRemove = removeButton.dataset.domain;
+      this.handleRemoveDomain(domainToRemove);
+    });
+
+    return item;
+  }
+
+  /**
+   * HTML转义函数
+   */
+  escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  /**
+   * 应用基础样式
+   */
+  applyBaseStyles() {
+    const styles = `
+            .tomato-monkey-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 9999;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+            
+            .tomato-monkey-overlay.show {
+                opacity: 1;
+            }
+            
+            .tomato-monkey-settings-panel {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) scale(0.9);
+                width: 90vw;
+                max-width: 800px;
+                height: 80vh;
+                max-height: 600px;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+                z-index: 10000;
+                display: flex;
+                flex-direction: column;
+                opacity: 0;
+                transition: all 0.3s ease;
+            }
+            
+            .tomato-monkey-settings-panel.show {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
+            }
+            
+            .tomato-monkey-hidden {
+                display: none !important;
+            }
+        `;
+
+    GM_addStyle(styles);
+  }
+
+  /**
+   * 触发自定义事件
+   * @param {string} eventType - 事件类型
+   * @param {Object} detail - 事件详情
+   */
+  dispatchEvent(eventType, detail = {}) {
+    const event = new CustomEvent(`tomato-monkey-${eventType}`, {
+      detail,
+      bubbles: false,
+      cancelable: false,
+    });
+
+    document.dispatchEvent(event);
+  }
+
+  /**
+   * 销毁设置面板
+   */
+  destroy() {
+    // 清理撤销Toast
+    this.hideUndoToast();
+
+    if (this.panel) {
+      this.panel.remove();
+    }
+    if (this.overlay) {
+      this.overlay.remove();
+    }
+
+    this.tabs.clear();
+    console.log("[SettingsPanel] Destroyed");
+  }
+}
+
+// 如果在浏览器环境中，将其添加到全局对象
+if (typeof window !== "undefined") {
+  window.SettingsPanel = SettingsPanel;
+}
+
+    /**
+     * TodoList - ToDo列表UI组件
+     */
+    /**
+ * ToDo列表组件类
+ */
+class TodoList {
+  constructor(container, taskManager) {
+    this.container = container;
+    this.taskManager = taskManager;
+    this.isInitialized = false;
+
+    // UI元素引用
+    this.inputField = null;
+    this.addButton = null;
+    this.taskList = null;
+    this.statsDisplay = null;
+    this.clearCompletedButton = null;
+
+    // 状态
+    this.tasks = [];
+    this.isLoading = false;
+
+    this.initialize();
+  }
+
+  /**
+   * 初始化组件
+   */
+  async initialize() {
+    if (this.isInitialized) {
+      return;
+    }
+
+    try {
+      this.createUI();
+      this.setupEventListeners();
+      this.bindTaskManager();
+      await this.loadTasks();
+
+      this.isInitialized = true;
+      console.log("[TodoList] Initialized successfully");
+    } catch (error) {
+      console.error("[TodoList] Failed to initialize:", error);
+      this.showError("初始化失败，请刷新页面重试");
+    }
+  }
+
+  /**
+   * 创建UI界面
+   */
+  createUI() {
+    this.container.innerHTML = `
+            <div class="todo-input-section">
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="todo-input" 
+                        class="todo-input" 
+                        placeholder="输入新任务..." 
+                        maxlength="200"
+                        aria-label="新任务输入"
+                    />
+                    <button 
+                        type="button" 
+                        id="add-task-btn" 
+                        class="add-task-button"
+                        title="添加任务 (Enter)"
+                        aria-label="添加新任务"
+                    >
+                        <span class="button-icon">+</span>
+                        <span class="button-text">添加</span>
+                    </button>
+                </div>
+                <div class="input-error-message hidden" id="input-error"></div>
+            </div>
+            
+            <div class="todo-stats-section">
+                <div class="stats-display" id="stats-display">
+                    <span class="stats-item">
+                        <span class="stats-label">总计:</span>
+                        <span class="stats-value" id="total-count">0</span>
+                    </span>
+                    <span class="stats-item">
+                        <span class="stats-label">待完成:</span>
+                        <span class="stats-value" id="pending-count">0</span>
+                    </span>
+                    <span class="stats-item">
+                        <span class="stats-label">已完成:</span>
+                        <span class="stats-value" id="completed-count">0</span>
+                    </span>
+                </div>
+                <button 
+                    type="button" 
+                    id="clear-completed-btn" 
+                    class="clear-completed-button hidden"
+                    title="清除所有已完成任务"
+                >
+                    清除已完成
+                </button>
+            </div>
+            
+            <div class="todo-list-section">
+                <div class="loading-indicator hidden" id="loading-indicator">
+                    <span class="loading-spinner"></span>
+                    <span>加载中...</span>
+                </div>
+                <div class="empty-state hidden" id="empty-state">
+                    <div class="empty-icon">📝</div>
+                    <h4>暂无任务</h4>
+                    <p>添加您的第一个任务来开始管理待办事项</p>
+                </div>
+                <ul class="task-list" id="task-list" role="list"></ul>
+            </div>
+        `;
+
+    // 获取UI元素引用
+    this.inputField = this.container.querySelector("#todo-input");
+    this.addButton = this.container.querySelector("#add-task-btn");
+    this.taskList = this.container.querySelector("#task-list");
+    this.statsDisplay = this.container.querySelector("#stats-display");
+    this.clearCompletedButton = this.container.querySelector(
+      "#clear-completed-btn",
+    );
+    this.loadingIndicator = this.container.querySelector("#loading-indicator");
+    this.emptyState = this.container.querySelector("#empty-state");
+    this.inputError = this.container.querySelector("#input-error");
+
+    // 统计元素
+    this.totalCount = this.container.querySelector("#total-count");
+    this.pendingCount = this.container.querySelector("#pending-count");
+    this.completedCount = this.container.querySelector("#completed-count");
+  }
+
+  /**
+   * 设置事件监听器
+   */
+  setupEventListeners() {
+    // 添加任务
+    this.addButton.addEventListener("click", () => this.addTask());
+
+    // 输入框回车添加任务
+    this.inputField.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        this.addTask();
+      }
+    });
+
+    // 输入验证
+    this.inputField.addEventListener("input", () => {
+      this.validateInput();
+      this.updateAddButtonState();
+    });
+
+    // 清除已完成任务
+    this.clearCompletedButton.addEventListener("click", () => {
+      this.clearCompletedTasks();
+    });
+
+    // 任务列表事件委托
+    this.taskList.addEventListener("click", (e) => {
+      this.handleTaskListClick(e);
+    });
+
+    // 任务列表键盘事件
+    this.taskList.addEventListener("keydown", (e) => {
+      this.handleTaskListKeydown(e);
+    });
+  }
+
+  /**
+   * 绑定TaskManager事件
+   */
+  bindTaskManager() {
+    if (!this.taskManager) return;
+
+    // 监听TaskManager事件
+    this.taskManager.addObserver((event, data) => {
+      this.handleTaskManagerEvent(event, data);
+    });
+  }
+
+  /**
+   * 处理TaskManager事件
+   * @param {string} event - 事件类型
+   * @param {Object} data - 事件数据
+   */
+  handleTaskManagerEvent(event, data) {
+    switch (event) {
+      case "taskCreated":
+      case "taskToggled":
+      case "taskDeleted":
+      case "completedTasksCleared":
+        this.loadTasks();
+        break;
+    }
+  }
+
+  /**
+   * 加载任务数据
+   */
+  async loadTasks() {
+    if (!this.taskManager || this.isLoading) return;
+
+    this.isLoading = true;
+    this.showLoading(true);
+
+    try {
+      this.tasks = this.taskManager.getAllTasks();
+      this.renderTaskList();
+      this.updateStats();
+      this.updateUI();
+    } catch (error) {
+      console.error("[TodoList] Failed to load tasks:", error);
+      this.showError("加载任务失败");
+    } finally {
+      this.isLoading = false;
+      this.showLoading(false);
+    }
+  }
+
+  /**
+   * 添加新任务
+   */
+  async addTask() {
+    const title = this.inputField.value.trim();
+
+    if (!this.validateTaskTitle(title)) {
+      return;
+    }
+
+    this.setButtonLoading(this.addButton, true);
+    this.clearError();
+
+    try {
+      await this.taskManager.createTask(title);
+      this.inputField.value = "";
+      this.updateAddButtonState();
+      this.inputField.focus();
+    } catch (error) {
+      console.error("[TodoList] Failed to add task:", error);
+      this.showError("添加任务失败，请重试");
+    } finally {
+      this.setButtonLoading(this.addButton, false);
+    }
+  }
+
+  /**
+   * 切换任务完成状态
+   * @param {string} taskId - 任务ID
+   */
+  async toggleTask(taskId) {
+    try {
+      await this.taskManager.toggleTaskCompletion(taskId);
+    } catch (error) {
+      console.error("[TodoList] Failed to toggle task:", error);
+      this.showError("操作失败，请重试");
+    }
+  }
+
+  /**
+   * 删除任务
+   * @param {string} taskId - 任务ID
+   * @param {string} taskTitle - 任务标题（用于确认）
+   */
+  async deleteTask(taskId, taskTitle) {
+    const confirmed = confirm(`确定要删除任务 "${taskTitle}" 吗？`);
+    if (!confirmed) return;
+
+    try {
+      await this.taskManager.deleteTask(taskId);
+    } catch (error) {
+      console.error("[TodoList] Failed to delete task:", error);
+      this.showError("删除失败，请重试");
+    }
+  }
+
+  /**
+   * 开始专注会话
+   * @param {string} taskId - 任务ID
+   * @param {string} taskTitle - 任务标题
+   */
+  async startFocusSession(taskId, taskTitle) {
+    try {
+      // 获取TimerManager实例
+      const timerManager = window.TimerManager ? window.TimerManager.getInstance() : null;
+      
+      if (!timerManager) {
+        this.showError("计时器模块未就绪，请刷新页面重试");
+        console.error("[TodoList] TimerManager not available");
+        return;
+      }
+
+      // 检查是否已有计时器在运行
+      const timerState = timerManager.getTimerState();
+      if (timerState.status === "running") {
+        const confirmed = confirm("已有计时器在运行中，是否要停止当前计时器并开始新的专注会话？");
+        if (!confirmed) return;
+        
+        timerManager.stopTimer(true);
+      }
+
+      // 启动计时器 (默认25分钟) - 现在是异步调用，会在此时请求通知权限
+      const started = await timerManager.startTimer(taskId, taskTitle, 1500);
+      
+      if (started) {
+        console.log(`[TodoList] Started focus session for task: ${taskTitle}`);
+      } else {
+        this.showError("无法启动专注会话，请重试");
+        console.error("[TodoList] Failed to start timer");
+      }
+
+    } catch (error) {
+      console.error("[TodoList] Failed to start focus session:", error);
+      this.showError("启动专注会话失败，请重试");
+    }
+  }
+
+  /**
+   * 清除所有已完成任务
+   */
+  async clearCompletedTasks() {
+    const completedCount = this.tasks.filter((task) => task.isCompleted).length;
+    if (completedCount === 0) return;
+
+    const confirmed = confirm(`确定要清除 ${completedCount} 个已完成任务吗？`);
+    if (!confirmed) return;
+
+    try {
+      await this.taskManager.clearCompletedTasks();
+    } catch (error) {
+      console.error("[TodoList] Failed to clear completed tasks:", error);
+      this.showError("清除失败，请重试");
+    }
+  }
+
+  /**
+   * 渲染任务列表
+   */
+  renderTaskList() {
+    if (this.tasks.length === 0) {
+      this.taskList.innerHTML = "";
+      return;
+    }
+
+    const taskItems = this.tasks.map((task) => this.createTaskElement(task));
+    this.taskList.innerHTML = taskItems.join("");
+  }
+
+  /**
+   * 创建任务元素HTML
+   * @param {Task} task - 任务对象
+   * @returns {string} HTML字符串
+   */
+  createTaskElement(task) {
+    const completedClass = task.isCompleted ? "completed" : "";
+    const checkedAttr = task.isCompleted ? "checked" : "";
+    const createdDate = new Date(task.createdAt).toLocaleDateString();
+    const completedDate = task.completedAt
+      ? new Date(task.completedAt).toLocaleDateString()
+      : "";
+
+    return `
+            <li class="task-item ${completedClass}" data-task-id="${task.id}" role="listitem">
+                <div class="task-content">
+                    <label class="task-checkbox-label">
+                        <input 
+                            type="checkbox" 
+                            class="task-checkbox" 
+                            ${checkedAttr}
+                            aria-label="标记任务为${task.isCompleted ? "未完成" : "已完成"}"
+                        />
+                        <span class="checkbox-custom"></span>
+                    </label>
+                    
+                    <div class="task-details">
+                        <div class="task-title">${task.title}</div>
+                        <div class="task-meta">
+                            <span class="task-date">创建于 ${createdDate}</span>
+                            ${task.isCompleted ? `<span class="task-completed-date">完成于 ${completedDate}</span>` : ""}
+                            ${task.pomodoroCount > 0 ? `<span class="pomodoro-count">🍅 ${task.pomodoroCount}</span>` : ""}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="task-actions">
+                    ${!task.isCompleted ? `
+                        <button 
+                            type="button" 
+                            class="start-focus-button" 
+                            title="开始专注"
+                            aria-label="开始专注: ${task.title}"
+                        >
+                            🍅
+                        </button>
+                    ` : ""}
+                    <button 
+                        type="button" 
+                        class="delete-task-button" 
+                        title="删除任务"
+                        aria-label="删除任务: ${task.title}"
+                    >
+                        🗑️
+                    </button>
+                </div>
+            </li>
+        `;
+  }
+
+  /**
+   * 处理任务列表点击事件
+   * @param {Event} e - 点击事件
+   */
+  handleTaskListClick(e) {
+    const taskItem = e.target.closest(".task-item");
+    if (!taskItem) return;
+
+    const taskId = taskItem.dataset.taskId;
+
+    // 复选框点击
+    if (e.target.classList.contains("task-checkbox")) {
+      this.toggleTask(taskId);
+    }
+
+    // 开始专注按钮点击
+    else if (e.target.classList.contains("start-focus-button")) {
+      const taskTitle = taskItem.querySelector(".task-title").textContent;
+      this.startFocusSession(taskId, taskTitle);
+    }
+
+    // 删除按钮点击
+    else if (e.target.classList.contains("delete-task-button")) {
+      const taskTitle = taskItem.querySelector(".task-title").textContent;
+      this.deleteTask(taskId, taskTitle);
+    }
+  }
+
+  /**
+   * 处理任务列表键盘事件
+   * @param {KeyboardEvent} e - 键盘事件
+   */
+  handleTaskListKeydown(e) {
+    const taskItem = e.target.closest(".task-item");
+    if (!taskItem) return;
+
+    const taskId = taskItem.dataset.taskId;
+
+    if (e.target.classList.contains("delete-task-button")) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        const taskTitle = taskItem.querySelector(".task-title").textContent;
+        this.deleteTask(taskId, taskTitle);
+      }
+    }
+  }
+
+  /**
+   * 更新统计信息
+   */
+  updateStats() {
+    const stats = this.taskManager
+      ? this.taskManager.getStatistics()
+      : {
+          total: 0,
+          pending: 0,
+          completed: 0,
+        };
+
+    this.totalCount.textContent = stats.total;
+    this.pendingCount.textContent = stats.pending;
+    this.completedCount.textContent = stats.completed;
+  }
+
+  /**
+   * 更新UI状态
+   */
+  updateUI() {
+    const hasCompletedTasks = this.tasks.some((task) => task.isCompleted);
+    const hasTasks = this.tasks.length > 0;
+
+    // 显示/隐藏清除已完成按钮
+    this.clearCompletedButton.classList.toggle("hidden", !hasCompletedTasks);
+
+    // 显示/隐藏空状态
+    this.emptyState.classList.toggle("hidden", hasTasks);
+    this.taskList.classList.toggle("hidden", !hasTasks);
+
+    this.updateAddButtonState();
+  }
+
+  /**
+   * 更新添加按钮状态
+   */
+  updateAddButtonState() {
+    const hasText = this.inputField.value.trim().length > 0;
+    this.addButton.disabled = !hasText;
+  }
+
+  /**
+   * 验证任务标题
+   * @param {string} title - 任务标题
+   * @returns {boolean} 验证是否通过
+   */
+  validateTaskTitle(title) {
+    if (!title || title.length === 0) {
+      this.showError("请输入任务内容");
+      this.inputField.focus();
+      return false;
+    }
+
+    if (title.length > 200) {
+      this.showError("任务内容不能超过200个字符");
+      this.inputField.focus();
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * 验证输入
+   */
+  validateInput() {
+    const value = this.inputField.value;
+
+    if (value.length > 200) {
+      this.showError("任务内容不能超过200个字符");
+    } else {
+      this.clearError();
+    }
+  }
+
+  /**
+   * 显示错误信息
+   * @param {string} message - 错误信息
+   */
+  showError(message) {
+    this.inputError.textContent = message;
+    this.inputError.classList.remove("hidden");
+    this.inputField.classList.add("error");
+  }
+
+  /**
+   * 清除错误信息
+   */
+  clearError() {
+    this.inputError.classList.add("hidden");
+    this.inputField.classList.remove("error");
+  }
+
+  /**
+   * 显示/隐藏加载状态
+   * @param {boolean} show - 是否显示
+   */
+  showLoading(show) {
+    this.loadingIndicator.classList.toggle("hidden", !show);
+  }
+
+  /**
+   * 设置按钮加载状态
+   * @param {HTMLElement} button - 按钮元素
+   * @param {boolean} loading - 是否加载中
+   */
+  setButtonLoading(button, loading) {
+    button.disabled = loading;
+    button.classList.toggle("loading", loading);
+
+    if (loading) {
+      button.querySelector(".button-text").textContent = "添加中...";
+    } else {
+      button.querySelector(".button-text").textContent = "添加";
+    }
+  }
+
+  /**
+   * 获取任务统计
+   * @returns {Object} 统计信息
+   */
+  getStats() {
+    return this.taskManager ? this.taskManager.getStatistics() : null;
+  }
+
+  /**
+   * 刷新组件
+   */
+  async refresh() {
+    await this.loadTasks();
+  }
+
+  /**
+   * 销毁组件
+   */
+  destroy() {
+    if (this.taskManager) {
+      this.taskManager.removeObserver(this.handleTaskManagerEvent);
+    }
+
+    if (this.container) {
+      this.container.innerHTML = "";
+    }
+
+    console.log("[TodoList] Destroyed");
+  }
+}
+
+// 如果在浏览器环境中，将其添加到全局对象
+if (typeof window !== "undefined") {
+  window.TodoList = TodoList;
+}
     
     // ========== 应用程序主类 ==========
     
+/**
+ * TomatoMonkey Main Application Entry Point
+ * 
+ * 主入口文件，负责：
+ * 1. 初始化脚本环境
+ * 2. 加载核心模块
+ * 3. 启动应用程序
+ */
+
+/**
+ * TomatoMonkeyApp - 应用程序主类
+ */
+class TomatoMonkeyApp {
+    constructor() {
+        this.isInitialized = false;
+        this.modules = {};
+    }
+
     /**
-     * TomatoMonkeyApp - 应用程序主类
+     * 初始化应用程序
      */
-    class TomatoMonkeyApp {
-        constructor() {
-            this.isInitialized = false;
-            this.modules = {};
+    async init() {
+        if (this.isInitialized) {
+            return;
         }
 
-        /**
-         * 初始化应用程序
-         */
-        async init() {
-            if (this.isInitialized) {
-                return;
+        try {
+            console.log('[TomatoMonkey] Initializing application...');
+            
+            // 🚨 早期拦截检查 (document-start phase)
+            await this.earlyInterceptionCheck();
+            
+            // 等待DOM加载完成
+            if (document.readyState === 'loading') {
+                await new Promise(resolve => {
+                    document.addEventListener('DOMContentLoaded', resolve);
+                });
             }
 
-            try {
-                console.log('[TomatoMonkey] Initializing application...');
-                
-                // 🚨 早期拦截检查 (document-start phase)
-                await this.earlyInterceptionCheck();
-                
-                // 等待DOM加载完成
-                if (document.readyState === 'loading') {
-                    await new Promise(resolve => {
-                        document.addEventListener('DOMContentLoaded', resolve);
-                    });
-                }
+            // 加载样式
+            this.loadStyles();
+            
+            // 初始化核心模块
+            await this.initializeCore();
+            
+            // 初始化设置面板
+            this.initializeSettingsPanel();
+            
+            // 设置键盘快捷键
+            this.setupKeyboardShortcuts();
+            
+            // 注册 Tampermonkey 菜单命令
+            this.registerMenuCommands();
 
-                // 加载样式
-                this.loadStyles();
-                
-                // 初始化核心模块
-                await this.initializeCore();
-                
-                // 初始化设置面板
-                this.initializeSettingsPanel();
-                
-                // 设置键盘快捷键
-                this.setupKeyboardShortcuts();
-                
-                // 注册 Tampermonkey 菜单命令
-                this.registerMenuCommands();
+            this.isInitialized = true;
+            console.log('[TomatoMonkey] Application initialized successfully');
+            
+        } catch (error) {
+            console.error('[TomatoMonkey] Failed to initialize application:', error);
+        }
+    }
 
-                this.isInitialized = true;
-                console.log('[TomatoMonkey] Application initialized successfully');
-                
-            } catch (error) {
-                console.error('[TomatoMonkey] Failed to initialize application:', error);
+    /**
+     * 早期拦截检查 (在document-start阶段执行)
+     */
+    async earlyInterceptionCheck() {
+        const currentUrl = window.location.href;
+        console.log('[EarlyCheck] Starting early interception check for URL:', currentUrl);
+        
+        // 快速初始化存储管理器
+        const tempStorageManager = new StorageManager();
+        
+        // 添加小延迟以允许跨标签页状态更新传播
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // 检查计时器状态
+        let timerState = tempStorageManager.getData("timerState");
+        console.log('[EarlyCheck] Retrieved timerState (first read):', timerState);
+        
+        // 双重检查：如果状态可能过时，再次读取
+        if (timerState && timerState.timestamp) {
+            const stateAge = Date.now() - timerState.timestamp;
+            if (stateAge > 1000) { // 如果状态超过1秒钟
+                console.log('[EarlyCheck] State seems old (' + stateAge + 'ms), re-reading...');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                timerState = tempStorageManager.getData("timerState");
+                console.log('[EarlyCheck] Retrieved timerState (second read):', timerState);
             }
         }
-
-        /**
-         * 早期拦截检查 (在document-start阶段执行)
-         */
-        async earlyInterceptionCheck() {
-            const currentUrl = window.location.href;
-            console.log('[EarlyCheck] Starting early interception check for URL:', currentUrl);
+        
+        // 额外检查：查看拦截器状态
+        const blockerState = tempStorageManager.getData("blockerState");
+        console.log('[EarlyCheck] Retrieved blockerState:', blockerState);
+        
+        // 如果拦截器明确标记为非活动状态，不应该拦截
+        if (blockerState && blockerState.isActive === false) {
+            console.log('[EarlyCheck] PASS DECISION: BlockerState indicates blocking is inactive');
+            return;
+        }
+        
+        if (timerState && timerState.status === 'running') {
+            console.log('[EarlyCheck] Timer is running, checking whitelist for URL:', currentUrl);
             
-            // 快速初始化存储管理器
-            const tempStorageManager = new StorageManager();
+            // 快速初始化白名单管理器
+            const tempWhitelistManager = new WhitelistManager();
+            await tempWhitelistManager.initialize(tempStorageManager);
             
-            // 添加小延迟以允许跨标签页状态更新传播
-            await new Promise(resolve => setTimeout(resolve, 50));
+            // 检查当前URL是否需要拦截
+            const shouldBlock = !tempWhitelistManager.isDomainAllowed(currentUrl);
+            console.log('[EarlyCheck] Whitelist check result - shouldBlock:', shouldBlock);
             
-            // 检查计时器状态
-            let timerState = tempStorageManager.getData("timerState");
-            console.log('[EarlyCheck] Retrieved timerState (first read):', timerState);
+            const isExempt = this.isExemptUrl(currentUrl);
+            console.log('[EarlyCheck] URL exemption check - isExempt:', isExempt);
             
-            // 双重检查：如果状态可能过时，再次读取
-            if (timerState && timerState.timestamp) {
-                const stateAge = Date.now() - timerState.timestamp;
-                if (stateAge > 1000) { // 如果状态超过1秒钟
-                    console.log('[EarlyCheck] State seems old (' + stateAge + 'ms), re-reading...');
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    timerState = tempStorageManager.getData("timerState");
-                    console.log('[EarlyCheck] Retrieved timerState (second read):', timerState);
-                }
-            }
-            
-            // 额外检查：查看拦截器状态
-            const blockerState = tempStorageManager.getData("blockerState");
-            console.log('[EarlyCheck] Retrieved blockerState:', blockerState);
-            
-            // 如果拦截器明确标记为非活动状态，不应该拦截
-            if (blockerState && blockerState.isActive === false) {
-                console.log('[EarlyCheck] PASS DECISION: BlockerState indicates blocking is inactive');
-                return;
-            }
-            
-            if (timerState && timerState.status === 'running') {
-                console.log('[EarlyCheck] Timer is running, checking whitelist for URL:', currentUrl);
-                
-                // 快速初始化白名单管理器
-                const tempWhitelistManager = new WhitelistManager();
-                await tempWhitelistManager.initialize(tempStorageManager);
-                
-                // 检查当前URL是否需要拦截
-                const shouldBlock = !tempWhitelistManager.isDomainAllowed(currentUrl);
-                console.log('[EarlyCheck] Whitelist check result - shouldBlock:', shouldBlock);
-                
-                const isExempt = this.isExemptUrl(currentUrl);
-                console.log('[EarlyCheck] URL exemption check - isExempt:', isExempt);
-                
-                if (shouldBlock && !isExempt) {
-                    console.log('[EarlyCheck] BLOCKING DECISION: Page will be blocked');
-                    console.log('[EarlyCheck] Timer status:', timerState.status, 'shouldBlock:', shouldBlock, 'isExempt:', isExempt);
-                    // 标记需要拦截，等待完全初始化后显示拦截界面
-                    this.pendingBlocking = true;
-                } else {
-                    console.log('[EarlyCheck] PASS DECISION: Page will NOT be blocked');
-                    console.log('[EarlyCheck] Reason - shouldBlock:', shouldBlock, 'isExempt:', isExempt);
-                }
+            if (shouldBlock && !isExempt) {
+                console.log('[EarlyCheck] BLOCKING DECISION: Page will be blocked');
+                console.log('[EarlyCheck] Timer status:', timerState.status, 'shouldBlock:', shouldBlock, 'isExempt:', isExempt);
+                // 标记需要拦截，等待完全初始化后显示拦截界面
+                this.pendingBlocking = true;
             } else {
-                const status = timerState ? timerState.status : 'no-timer-state';
-                console.log('[EarlyCheck] PASS DECISION: Timer not running (status: ' + status + '), page will NOT be blocked');
+                console.log('[EarlyCheck] PASS DECISION: Page will NOT be blocked');
+                console.log('[EarlyCheck] Reason - shouldBlock:', shouldBlock, 'isExempt:', isExempt);
             }
+        } else {
+            const status = timerState ? timerState.status : 'no-timer-state';
+            console.log('[EarlyCheck] PASS DECISION: Timer not running (status: ' + status + '), page will NOT be blocked');
         }
+    }
 
-        /**
-         * 检查URL是否为豁免页面
-         */
-        isExemptUrl(url) {
-            const exemptPatterns = [
-                'about:', 'chrome://', 'chrome-extension://', 'moz-extension://',
-                'edge://', 'opera://', 'file://', 'data:', 'javascript:', 'blob:',
-                'localhost', '127.0.0.1', '0.0.0.0'
-            ];
-            const lowerUrl = url.toLowerCase();
-            return exemptPatterns.some(pattern => lowerUrl.startsWith(pattern));
-        }
+    /**
+     * 检查URL是否为豁免页面
+     */
+    isExemptUrl(url) {
+        const exemptPatterns = [
+            'about:', 'chrome://', 'chrome-extension://', 'moz-extension://',
+            'edge://', 'opera://', 'file://', 'data:', 'javascript:', 'blob:',
+            'localhost', '127.0.0.1', '0.0.0.0'
+        ];
+        const lowerUrl = url.toLowerCase();
+        return exemptPatterns.some(pattern => lowerUrl.startsWith(pattern));
+    }
 
-        /**
-         * 加载CSS样式
-         */
-        loadStyles() {
-            const styles = `/**
-* TomatoMonkey - 主样式文件
+    /**
+     * 加载CSS样式
+     */
+    loadStyles() {
+        const styles = `/**
+* FocusPage - 专注页面样式
 * 
-* 设计规范：
-* - 主色: #D95550 (番茄红)
-* - 辅助色: #70A85C (绿色) 
-* - 中性色: #FFFFFF, #F5F5F5, #666666, #757575 (修复 A11Y-001: 原 #757575)
-* - 错误色: #E53935
-* - 字体: Inter, Lato, Helvetica Neue, Arial
-* - H2: 18px, Body: 14px
-* - 对比度: ≥4.5:1 (WCAG 2.1 AA)
+* 设计原则：
+* - 极简设计，无干扰界面
+* - 大字体倒计时显示 (72px)
+* - 居中布局
+* - 番茄红主色调 (#D95550)
+* - 平滑动画效果
+* - 响应式设计
 */
+.focus-page-container {
+position: fixed;
+top: 0;
+left: 0;
+width: 100vw;
+height: 100vh;
+z-index: 20000;
+display: flex;
+align-items: center;
+justify-content: center;
+font-family: "Inter", "Lato", "Helvetica Neue", "Arial", sans-serif;
+opacity: 0;
+visibility: hidden;
+transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.focus-page-container.show {
+opacity: 1;
+visibility: visible;
+}
+.focus-page-overlay {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(255, 255, 255, 0.98);
+backdrop-filter: blur(10px);
+-webkit-backdrop-filter: blur(10px);
+}
+.focus-page-content {
+position: relative;
+z-index: 1;
+text-align: center;
+max-width: 600px;
+width: 90%;
+padding: 40px 20px;
+background: rgba(255, 255, 255, 0.9);
+border-radius: 20px;
+box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.focus-header {
+margin-bottom: 40px;
+position: relative;
+}
+.focus-task-title {
+font-size: 24px;
+font-weight: 600;
+color: #666666;
+margin-bottom: 12px;
+line-height: 1.3;
+word-break: break-word;
+max-width: 100%;
+}
+.focus-status {
+font-size: 16px;
+font-weight: 500;
+color: #757575;
+margin-bottom: 8px;
+opacity: 0.8;
+}
+.focus-status.running {
+color: #D95550;
+}
+.focus-status.paused {
+color: #FF9800;
+}
+.focus-status.completed {
+color: #70A85C;
+}
+.focus-status.blocked {
+color: #D95550;
+font-weight: 600;
+}
+.focus-settings-icon {
+position: absolute;
+top: 0;
+right: 0;
+font-size: 20px;
+color: #BBBBBB;
+cursor: pointer;
+padding: 8px;
+border-radius: 50%;
+transition: all 0.2s ease;
+user-select: none;
+-webkit-user-select: none;
+-moz-user-select: none;
+-ms-user-select: none;
+}
+.focus-settings-icon:hover {
+color: #D95550;
+background-color: rgba(217, 85, 80, 0.1);
+transform: scale(1.1);
+}
+.focus-settings-icon:active {
+transform: scale(0.95);
+}
+.focus-timer {
+margin-bottom: 40px;
+}
+.countdown-display {
+font-size: 72px;
+font-weight: 700;
+color: #D95550;
+margin-bottom: 20px;
+line-height: 1;
+font-variant-numeric: tabular-nums;
+letter-spacing: -0.02em;
+text-shadow: 0 2px 10px rgba(217, 85, 80, 0.2);
+transition: all 0.3s ease;
+}
+.countdown-display.warning {
+color: #FF9800;
+animation: pulse-warning 2s infinite;
+}
+.countdown-display.urgent {
+color: #E53935;
+animation: pulse-urgent 1s infinite;
+}
+@keyframes pulse-warning {
+0%, 100% { transform: scale(1); }
+50% { transform: scale(1.02); }
+}
+@keyframes pulse-urgent {
+0%, 100% { transform: scale(1); }
+50% { transform: scale(1.05); }
+}
+.countdown-progress {
+width: 100%;
+height: 6px;
+background: rgba(217, 85, 80, 0.1);
+border-radius: 3px;
+overflow: hidden;
+margin-bottom: 20px;
+}
+.progress-bar {
+height: 100%;
+background: linear-gradient(90deg, #D95550, #E06B66);
+border-radius: 3px;
+transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+width: 0%;
+box-shadow: 0 1px 3px rgba(217, 85, 80, 0.3);
+}
+.focus-actions {
+margin-bottom: 30px;
+display: flex;
+justify-content: center;
+gap: 16px;
+flex-wrap: wrap;
+}
+.focus-action-btn {
+background: #ffffff;
+border: 2px solid #D95550;
+color: #D95550;
+font-size: 16px;
+font-weight: 500;
+padding: 12px 24px;
+border-radius: 8px;
+cursor: pointer;
+transition: all 0.2s ease;
+outline: none;
+font-family: inherit;
+min-width: 100px;
+}
+.focus-action-btn:hover {
+background: #D95550;
+color: #ffffff;
+transform: translateY(-1px);
+box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
+}
+.focus-action-btn:active {
+transform: translateY(0);
+box-shadow: 0 2px 6px rgba(217, 85, 80, 0.3);
+}
+.focus-action-btn.skip-btn {
+background: #FF9800;
+color: white;
+border: 2px solid #FF9800;
+}
+.focus-action-btn.skip-btn:hover {
+background: #F57C00;
+border-color: #F57C00;
+color: white;
+transform: translateY(-2px);
+box-shadow: 0 6px 16px rgba(255, 152, 0, 0.4);
+}
+.focus-action-btn.skip-btn:active {
+background: #E65100;
+border-color: #E65100;
+transform: translateY(0);
+box-shadow: 0 3px 8px rgba(255, 152, 0, 0.4);
+}
+.focus-action-btn.end-focus-btn {
+background: #F44336;
+color: white;
+border: 2px solid #F44336;
+}
+.focus-action-btn.end-focus-btn:hover {
+background: #D32F2F;
+border-color: #D32F2F;
+color: white;
+transform: translateY(-2px);
+box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4);
+}
+.focus-action-btn.end-focus-btn:active {
+background: #B71C1C;
+border-color: #B71C1C;
+transform: translateY(0);
+box-shadow: 0 3px 8px rgba(244, 67, 54, 0.4);
+}
+.pause-btn {
+border-color: #FF9800;
+color: #FF9800;
+}
+.pause-btn:hover {
+background: #FF9800;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+}
+.resume-btn {
+border-color: #70A85C;
+color: #70A85C;
+}
+.resume-btn:hover {
+background: #70A85C;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(112, 168, 92, 0.3);
+}
+.modify-time-btn {
+border-color: #E67E22;
+color: #E67E22;
+}
+.modify-time-btn:hover {
+background: #E67E22;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
+}
+.complete-btn {
+border-color: #70A85C;
+color: #70A85C;
+}
+.complete-btn:hover {
+background: #70A85C;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(112, 168, 92, 0.3);
+}
+.cancel-complete-btn {
+border-color: #999999;
+color: #999999;
+}
+.cancel-complete-btn:hover {
+background: #999999;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(153, 153, 153, 0.3);
+}
+.extend-time-btn {
+border-color: #3498db;
+color: #3498db;
+}
+.extend-time-btn:hover {
+background: #3498db;
+color: #ffffff;
+box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+.focus-info {
+margin-bottom: 20px;
+}
+.focus-hint {
+font-size: 16px;
+color: #757575;
+opacity: 0.8;
+line-height: 1.5;
+}
+.completion-message {
+text-align: center;
+}
+.completion-icon {
+font-size: 48px;
+margin-bottom: 16px;
+}
+.completion-text {
+font-size: 24px;
+font-weight: 600;
+color: #70A85C;
+margin-bottom: 12px;
+}
+.completion-task {
+font-size: 18px;
+color: #666666;
+opacity: 0.8;
+}
+.time-modify-modal {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+z-index: 10003;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.time-modify-modal.hidden {
+display: none;
+}
+.modal-overlay {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(0, 0, 0, 0.5);
+backdrop-filter: blur(4px);
+}
+.modal-content {
+position: relative;
+background: #ffffff;
+border-radius: 16px;
+padding: 0;
+width: 420px;
+max-width: 90vw;
+box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+animation: modalSlideIn 0.3s ease-out;
+}
+@keyframes modalSlideIn {
+from {
+opacity: 0;
+transform: translateY(-20px) scale(0.95);
+}
+to {
+opacity: 1;
+transform: translateY(0) scale(1);
+}
+}
+.modal-header {
+padding: 24px 24px 16px 24px;
+border-bottom: 1px solid #f0f0f0;
+}
+.modal-header h3 {
+margin: 0;
+font-size: 20px;
+font-weight: 600;
+color: #333333;
+}
+.modal-body {
+padding: 20px 24px;
+}
+.time-input-group {
+margin-bottom: 20px;
+}
+.time-input-group label {
+display: block;
+margin-bottom: 8px;
+font-size: 14px;
+font-weight: 500;
+color: #555555;
+}
+.time-input {
+width: 100%;
+padding: 12px 16px;
+border: 2px solid #e0e0e0;
+border-radius: 8px;
+font-size: 16px;
+transition: border-color 0.2s ease;
+box-sizing: border-box;
+}
+.time-input:focus {
+outline: none;
+border-color: #D95550;
+box-shadow: 0 0 0 3px rgba(217, 85, 80, 0.1);
+}
+.time-presets {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 8px;
+margin-top: 16px;
+}
+.preset-btn {
+padding: 10px 16px;
+border: 2px solid #e0e0e0;
+background: #ffffff;
+color: #666666;
+border-radius: 6px;
+font-size: 14px;
+cursor: pointer;
+transition: all 0.2s ease;
+}
+.preset-btn:hover {
+border-color: #D95550;
+color: #D95550;
+}
+.preset-btn.selected {
+border-color: #D95550;
+background: #D95550;
+color: #ffffff;
+}
+.modal-actions {
+padding: 16px 24px 24px 24px;
+display: flex;
+gap: 12px;
+justify-content: flex-end;
+}
+.modal-btn {
+padding: 10px 24px;
+border: none;
+border-radius: 6px;
+font-size: 14px;
+font-weight: 500;
+cursor: pointer;
+transition: all 0.2s ease;
+min-width: 80px;
+}
+.cancel-btn {
+background: #f5f5f5;
+color: #666666;
+}
+.cancel-btn:hover {
+background: #e8e8e8;
+}
+.confirm-btn {
+background: #D95550;
+color: #ffffff;
+}
+.confirm-btn:hover {
+background: #c44540;
+box-shadow: 0 2px 8px rgba(217, 85, 80, 0.3);
+}
+.confirm-btn:disabled {
+background: #cccccc;
+cursor: not-allowed;
+}
+@media (max-width: 768px) {
+.focus-page-content {
+width: 95%;
+padding: 30px 16px;
+}
+.countdown-display {
+font-size: 64px;
+}
+.focus-task-title {
+font-size: 20px;
+}
+.focus-actions {
+gap: 12px;
+}
+.focus-action-btn {
+font-size: 14px;
+padding: 10px 20px;
+min-width: 80px;
+}
+}
+@media (max-width: 480px) {
+.focus-page-content {
+width: 95%;
+padding: 24px 12px;
+margin: 20px 0;
+border-radius: 16px;
+}
+.focus-header {
+margin-bottom: 30px;
+}
+.countdown-display {
+font-size: 56px;
+margin-bottom: 16px;
+}
+.focus-task-title {
+font-size: 18px;
+margin-bottom: 8px;
+}
+.focus-status {
+font-size: 14px;
+}
+.countdown-progress {
+height: 4px;
+margin-bottom: 16px;
+}
+.focus-timer {
+margin-bottom: 30px;
+}
+.focus-actions {
+flex-direction: column;
+align-items: center;
+gap: 8px;
+}
+.focus-action-btn {
+font-size: 14px;
+padding: 10px 20px;
+width: 140px;
+}
+.focus-hint {
+font-size: 14px;
+}
+.completion-icon {
+font-size: 40px;
+margin-bottom: 12px;
+}
+.completion-text {
+font-size: 20px;
+margin-bottom: 8px;
+}
+.completion-task {
+font-size: 16px;
+}
+.modal-content {
+width: 360px;
+margin: 16px;
+}
+.modal-header {
+padding: 20px 20px 12px 20px;
+}
+.modal-header h3 {
+font-size: 18px;
+}
+.modal-body {
+padding: 16px 20px;
+}
+.time-presets {
+grid-template-columns: 1fr 1fr;
+gap: 6px;
+}
+.preset-btn {
+padding: 8px 12px;
+font-size: 13px;
+}
+.modal-actions {
+padding: 12px 20px 20px 20px;
+}
+}
+@media (max-width: 360px) {
+.countdown-display {
+font-size: 48px;
+}
+.focus-task-title {
+font-size: 16px;
+}
+.focus-action-btn {
+width: 120px;
+}
+}
+@media (min-width: 1200px) {
+.focus-page-content {
+max-width: 700px;
+padding: 60px 40px;
+}
+.countdown-display {
+font-size: 84px;
+}
+.focus-task-title {
+font-size: 28px;
+}
+.focus-status {
+font-size: 18px;
+}
+.focus-hint {
+font-size: 18px;
+}
+.modal-content {
+width: calc(100vw - 32px);
+margin: 16px;
+}
+.modal-header {
+padding: 16px 16px 8px 16px;
+}
+.modal-body {
+padding: 12px 16px;
+}
+.time-presets {
+grid-template-columns: 1fr;
+gap: 8px;
+}
+.modal-actions {
+padding: 8px 16px 16px 16px;
+flex-direction: column;
+}
+.modal-btn {
+width: 100%;
+margin-bottom: 8px;
+}
+.modal-btn:last-child {
+margin-bottom: 0;
+}
+}
+@media (prefers-contrast: high) {
+.focus-page-overlay {
+background: rgba(255, 255, 255, 0.99);
+}
+.focus-page-content {
+background: #ffffff;
+border: 2px solid #000000;
+}
+.countdown-display {
+text-shadow: none;
+}
+.focus-action-btn {
+border-width: 3px;
+}
+}
+@media (prefers-reduced-motion: reduce) {
+.focus-page-container,
+.countdown-display,
+.progress-bar,
+.focus-action-btn {
+transition: none;
+}
+.countdown-display.warning,
+.countdown-display.urgent {
+animation: none;
+}
+}
+@media (prefers-color-scheme: dark) {
+.focus-page-overlay {
+background: rgba(30, 30, 30, 0.98);
+}
+.focus-page-content {
+background: rgba(40, 40, 40, 0.95);
+border-color: rgba(255, 255, 255, 0.1);
+}
+.focus-task-title {
+color: #e0e0e0;
+}
+.focus-status {
+color: #b0b0b0;
+}
+.focus-hint {
+color: #a0a0a0;
+}
+.focus-action-btn {
+background: rgba(60, 60, 60, 0.8);
+}
+}
 .tomato-monkey-panel *,
 .tomato-monkey-panel *::before,
 .tomato-monkey-panel *::after {
@@ -6304,821 +6935,189 @@ scroll-behavior: auto !important;
 .loading-spinner {
 animation: none;
 }
-}
-.focus-page-container {
-position: fixed;
-top: 0;
-left: 0;
-width: 100vw;
-height: 100vh;
-z-index: 20000;
-display: flex;
-align-items: center;
-justify-content: center;
-font-family: "Inter", "Lato", "Helvetica Neue", "Arial", sans-serif;
-opacity: 0;
-visibility: hidden;
-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.focus-page-container.show {
-opacity: 1;
-visibility: visible;
-}
-.focus-page-overlay {
-position: absolute;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
-background: rgba(255, 255, 255, 0.98);
-backdrop-filter: blur(10px);
--webkit-backdrop-filter: blur(10px);
-}
-.focus-page-content {
-position: relative;
-z-index: 1;
-text-align: center;
-max-width: 600px;
-width: 90%;
-padding: 40px 20px;
-background: rgba(255, 255, 255, 0.9);
-border-radius: 20px;
-box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
-backdrop-filter: blur(20px);
--webkit-backdrop-filter: blur(20px);
-border: 1px solid rgba(255, 255, 255, 0.3);
-}
-.focus-header {
-margin-bottom: 40px;
-position: relative;
-}
-.focus-task-title {
-font-size: 24px;
-font-weight: 600;
-color: #666666;
-margin-bottom: 12px;
-line-height: 1.3;
-word-break: break-word;
-max-width: 100%;
-}
-.focus-status {
-font-size: 16px;
-font-weight: 500;
-color: #757575;
-margin-bottom: 8px;
-opacity: 0.8;
-}
-.focus-status.running {
-color: #D95550;
-}
-.focus-status.paused {
-color: #FF9800;
-}
-.focus-status.completed {
-color: #70A85C;
-}
-.focus-status.blocked {
-color: #D95550;
-font-weight: 600;
-}
-.focus-settings-icon {
-position: absolute;
-top: 0;
-right: 0;
-font-size: 20px;
-color: #BBBBBB;
-cursor: pointer;
-padding: 8px;
-border-radius: 50%;
-transition: all 0.2s ease;
-user-select: none;
--webkit-user-select: none;
--moz-user-select: none;
--ms-user-select: none;
-}
-.focus-settings-icon:hover {
-color: #D95550;
-background-color: rgba(217, 85, 80, 0.1);
-transform: scale(1.1);
-}
-.focus-settings-icon:active {
-transform: scale(0.95);
-}
-.focus-timer {
-margin-bottom: 40px;
-}
-.countdown-display {
-font-size: 72px;
-font-weight: 700;
-color: #D95550;
-margin-bottom: 20px;
-line-height: 1;
-font-variant-numeric: tabular-nums;
-letter-spacing: -0.02em;
-text-shadow: 0 2px 10px rgba(217, 85, 80, 0.2);
-transition: all 0.3s ease;
-}
-.countdown-display.warning {
-color: #FF9800;
-animation: pulse-warning 2s infinite;
-}
-.countdown-display.urgent {
-color: #E53935;
-animation: pulse-urgent 1s infinite;
-}
-@keyframes pulse-warning {
-0%, 100% { transform: scale(1); }
-50% { transform: scale(1.02); }
-}
-@keyframes pulse-urgent {
-0%, 100% { transform: scale(1); }
-50% { transform: scale(1.05); }
-}
-.countdown-progress {
-width: 100%;
-height: 6px;
-background: rgba(217, 85, 80, 0.1);
-border-radius: 3px;
-overflow: hidden;
-margin-bottom: 20px;
-}
-.progress-bar {
-height: 100%;
-background: linear-gradient(90deg, #D95550, #E06B66);
-border-radius: 3px;
-transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-width: 0%;
-box-shadow: 0 1px 3px rgba(217, 85, 80, 0.3);
-}
-.focus-actions {
-margin-bottom: 30px;
-display: flex;
-justify-content: center;
-gap: 16px;
-flex-wrap: wrap;
-}
-.focus-action-btn {
-background: #ffffff;
-border: 2px solid #D95550;
-color: #D95550;
-font-size: 16px;
-font-weight: 500;
-padding: 12px 24px;
-border-radius: 8px;
-cursor: pointer;
-transition: all 0.2s ease;
-outline: none;
-font-family: inherit;
-min-width: 100px;
-}
-.focus-action-btn:hover {
-background: #D95550;
-color: #ffffff;
-transform: translateY(-1px);
-box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
-}
-.focus-action-btn:active {
-transform: translateY(0);
-box-shadow: 0 2px 6px rgba(217, 85, 80, 0.3);
-}
-.focus-action-btn.skip-btn {
-background: #FF9800;
-color: white;
-border: 2px solid #FF9800;
-}
-.focus-action-btn.skip-btn:hover {
-background: #F57C00;
-border-color: #F57C00;
-color: white;
-transform: translateY(-2px);
-box-shadow: 0 6px 16px rgba(255, 152, 0, 0.4);
-}
-.focus-action-btn.skip-btn:active {
-background: #E65100;
-border-color: #E65100;
-transform: translateY(0);
-box-shadow: 0 3px 8px rgba(255, 152, 0, 0.4);
-}
-.focus-action-btn.end-focus-btn {
-background: #F44336;
-color: white;
-border: 2px solid #F44336;
-}
-.focus-action-btn.end-focus-btn:hover {
-background: #D32F2F;
-border-color: #D32F2F;
-color: white;
-transform: translateY(-2px);
-box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4);
-}
-.focus-action-btn.end-focus-btn:active {
-background: #B71C1C;
-border-color: #B71C1C;
-transform: translateY(0);
-box-shadow: 0 3px 8px rgba(244, 67, 54, 0.4);
-}
-.pause-btn {
-border-color: #FF9800;
-color: #FF9800;
-}
-.pause-btn:hover {
-background: #FF9800;
-color: #ffffff;
-box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
-}
-.resume-btn {
-border-color: #70A85C;
-color: #70A85C;
-}
-.resume-btn:hover {
-background: #70A85C;
-color: #ffffff;
-box-shadow: 0 4px 12px rgba(112, 168, 92, 0.3);
-}
-.modify-time-btn {
-border-color: #E67E22;
-color: #E67E22;
-}
-.modify-time-btn:hover {
-background: #E67E22;
-color: #ffffff;
-box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
-}
-.complete-btn {
-border-color: #70A85C;
-color: #70A85C;
-}
-.complete-btn:hover {
-background: #70A85C;
-color: #ffffff;
-box-shadow: 0 4px 12px rgba(112, 168, 92, 0.3);
-}
-.cancel-complete-btn {
-border-color: #999999;
-color: #999999;
-}
-.cancel-complete-btn:hover {
-background: #999999;
-color: #ffffff;
-box-shadow: 0 4px 12px rgba(153, 153, 153, 0.3);
-}
-.extend-time-btn {
-border-color: #3498db;
-color: #3498db;
-}
-.extend-time-btn:hover {
-background: #3498db;
-color: #ffffff;
-box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
-}
-.focus-info {
-margin-bottom: 20px;
-}
-.focus-hint {
-font-size: 16px;
-color: #757575;
-opacity: 0.8;
-line-height: 1.5;
-}
-.completion-message {
-text-align: center;
-}
-.completion-icon {
-font-size: 48px;
-margin-bottom: 16px;
-}
-.completion-text {
-font-size: 24px;
-font-weight: 600;
-color: #70A85C;
-margin-bottom: 12px;
-}
-.completion-task {
-font-size: 18px;
-color: #666666;
-opacity: 0.8;
-}
-.time-modify-modal {
-position: fixed;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
-z-index: 10003;
-display: flex;
-align-items: center;
-justify-content: center;
-}
-.time-modify-modal.hidden {
-display: none;
-}
-.modal-overlay {
-position: absolute;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
-background: rgba(0, 0, 0, 0.5);
-backdrop-filter: blur(4px);
-}
-.modal-content {
-position: relative;
-background: #ffffff;
-border-radius: 16px;
-padding: 0;
-width: 420px;
-max-width: 90vw;
-box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-animation: modalSlideIn 0.3s ease-out;
-}
-@keyframes modalSlideIn {
-from {
-opacity: 0;
-transform: translateY(-20px) scale(0.95);
-}
-to {
-opacity: 1;
-transform: translateY(0) scale(1);
-}
-}
-.modal-header {
-padding: 24px 24px 16px 24px;
-border-bottom: 1px solid #f0f0f0;
-}
-.modal-header h3 {
-margin: 0;
-font-size: 20px;
-font-weight: 600;
-color: #333333;
-}
-.modal-body {
-padding: 20px 24px;
-}
-.time-input-group {
-margin-bottom: 20px;
-}
-.time-input-group label {
-display: block;
-margin-bottom: 8px;
-font-size: 14px;
-font-weight: 500;
-color: #555555;
-}
-.time-input {
-width: 100%;
-padding: 12px 16px;
-border: 2px solid #e0e0e0;
-border-radius: 8px;
-font-size: 16px;
-transition: border-color 0.2s ease;
-box-sizing: border-box;
-}
-.time-input:focus {
-outline: none;
-border-color: #D95550;
-box-shadow: 0 0 0 3px rgba(217, 85, 80, 0.1);
-}
-.time-presets {
-display: grid;
-grid-template-columns: 1fr 1fr;
-gap: 8px;
-margin-top: 16px;
-}
-.preset-btn {
-padding: 10px 16px;
-border: 2px solid #e0e0e0;
-background: #ffffff;
-color: #666666;
-border-radius: 6px;
-font-size: 14px;
-cursor: pointer;
-transition: all 0.2s ease;
-}
-.preset-btn:hover {
-border-color: #D95550;
-color: #D95550;
-}
-.preset-btn.selected {
-border-color: #D95550;
-background: #D95550;
-color: #ffffff;
-}
-.modal-actions {
-padding: 16px 24px 24px 24px;
-display: flex;
-gap: 12px;
-justify-content: flex-end;
-}
-.modal-btn {
-padding: 10px 24px;
-border: none;
-border-radius: 6px;
-font-size: 14px;
-font-weight: 500;
-cursor: pointer;
-transition: all 0.2s ease;
-min-width: 80px;
-}
-.cancel-btn {
-background: #f5f5f5;
-color: #666666;
-}
-.cancel-btn:hover {
-background: #e8e8e8;
-}
-.confirm-btn {
-background: #D95550;
-color: #ffffff;
-}
-.confirm-btn:hover {
-background: #c44540;
-box-shadow: 0 2px 8px rgba(217, 85, 80, 0.3);
-}
-.confirm-btn:disabled {
-background: #cccccc;
-cursor: not-allowed;
-}
-@media (max-width: 768px) {
-.focus-page-content {
-width: 95%;
-padding: 30px 16px;
-}
-.countdown-display {
-font-size: 64px;
-}
-.focus-task-title {
-font-size: 20px;
-}
-.focus-actions {
-gap: 12px;
-}
-.focus-action-btn {
-font-size: 14px;
-padding: 10px 20px;
-min-width: 80px;
-}
-}
-@media (max-width: 480px) {
-.focus-page-content {
-width: 95%;
-padding: 24px 12px;
-margin: 20px 0;
-border-radius: 16px;
-}
-.focus-header {
-margin-bottom: 30px;
-}
-.countdown-display {
-font-size: 56px;
-margin-bottom: 16px;
-}
-.focus-task-title {
-font-size: 18px;
-margin-bottom: 8px;
-}
-.focus-status {
-font-size: 14px;
-}
-.countdown-progress {
-height: 4px;
-margin-bottom: 16px;
-}
-.focus-timer {
-margin-bottom: 30px;
-}
-.focus-actions {
-flex-direction: column;
-align-items: center;
-gap: 8px;
-}
-.focus-action-btn {
-font-size: 14px;
-padding: 10px 20px;
-width: 140px;
-}
-.focus-hint {
-font-size: 14px;
-}
-.completion-icon {
-font-size: 40px;
-margin-bottom: 12px;
-}
-.completion-text {
-font-size: 20px;
-margin-bottom: 8px;
-}
-.completion-task {
-font-size: 16px;
-}
-.modal-content {
-width: 360px;
-margin: 16px;
-}
-.modal-header {
-padding: 20px 20px 12px 20px;
-}
-.modal-header h3 {
-font-size: 18px;
-}
-.modal-body {
-padding: 16px 20px;
-}
-.time-presets {
-grid-template-columns: 1fr 1fr;
-gap: 6px;
-}
-.preset-btn {
-padding: 8px 12px;
-font-size: 13px;
-}
-.modal-actions {
-padding: 12px 20px 20px 20px;
-}
-}
-@media (max-width: 360px) {
-.countdown-display {
-font-size: 48px;
-}
-.focus-task-title {
-font-size: 16px;
-}
-.focus-action-btn {
-width: 120px;
-}
-}
-@media (min-width: 1200px) {
-.focus-page-content {
-max-width: 700px;
-padding: 60px 40px;
-}
-.countdown-display {
-font-size: 84px;
-}
-.focus-task-title {
-font-size: 28px;
-}
-.focus-status {
-font-size: 18px;
-}
-.focus-hint {
-font-size: 18px;
-}
-.modal-content {
-width: calc(100vw - 32px);
-margin: 16px;
-}
-.modal-header {
-padding: 16px 16px 8px 16px;
-}
-.modal-body {
-padding: 12px 16px;
-}
-.time-presets {
-grid-template-columns: 1fr;
-gap: 8px;
-}
-.modal-actions {
-padding: 8px 16px 16px 16px;
-flex-direction: column;
-}
-.modal-btn {
-width: 100%;
-margin-bottom: 8px;
-}
-.modal-btn:last-child {
-margin-bottom: 0;
-}
-}
-@media (prefers-contrast: high) {
-.focus-page-overlay {
-background: rgba(255, 255, 255, 0.99);
-}
-.focus-page-content {
-background: #ffffff;
-border: 2px solid #000000;
-}
-.countdown-display {
-text-shadow: none;
-}
-.focus-action-btn {
-border-width: 3px;
-}
-}
-@media (prefers-reduced-motion: reduce) {
-.focus-page-container,
-.countdown-display,
-.progress-bar,
-.focus-action-btn {
-transition: none;
-}
-.countdown-display.warning,
-.countdown-display.urgent {
-animation: none;
-}
-}
-@media (prefers-color-scheme: dark) {
-.focus-page-overlay {
-background: rgba(30, 30, 30, 0.98);
-}
-.focus-page-content {
-background: rgba(40, 40, 40, 0.95);
-border-color: rgba(255, 255, 255, 0.1);
-}
-.focus-task-title {
-color: #e0e0e0;
-}
-.focus-status {
-color: #b0b0b0;
-}
-.focus-hint {
-color: #a0a0a0;
-}
-.focus-action-btn {
-background: rgba(60, 60, 60, 0.8);
-}
 }`;
-            GM_addStyle(styles);
-        }
+        GM_addStyle(styles);
+    }
 
-        /**
-         * 初始化核心模块
-         */
-        async initializeCore() {
-            // 初始化存储管理器
-            this.storageManager = new StorageManager();
-            
-            // 初始化白名单管理器
-            this.whitelistManager = new WhitelistManager();
-            await this.whitelistManager.initialize(this.storageManager);
-            
-            // 初始化任务管理器
-            this.taskManager = TaskManager.getInstance();
-            await this.taskManager.initialize(this.storageManager);
-            
-            // 初始化计时器管理器
-            this.timerManager = TimerManager.getInstance();
-            await this.timerManager.initialize(this.storageManager);
-            
-            // 初始化专注页面
-            this.focusPage = new FocusPage();
-            this.focusPage.initialize(this.timerManager, this.taskManager);
-            
-            // 初始化拦截器管理器
-            this.blockerManager = BlockerManager.getInstance();
-            await this.blockerManager.initialize(this.timerManager, this.whitelistManager, this.focusPage, this.storageManager);
-            
-            // 处理早期拦截检查的结果
-            if (this.pendingBlocking) {
-                console.log('[TomatoMonkey] Applying pending blocking from early interception check');
-                this.blockerManager.activateBlocking();
-            }
-            
-            console.log('[TomatoMonkey] Core modules initialized');
+    /**
+     * 初始化核心模块
+     */
+    async initializeCore() {
+        // 初始化存储管理器
+        this.storageManager = new StorageManager();
+        
+        // 初始化白名单管理器
+        this.whitelistManager = new WhitelistManager();
+        await this.whitelistManager.initialize(this.storageManager);
+        
+        // 初始化任务管理器
+        this.taskManager = TaskManager.getInstance();
+        await this.taskManager.initialize(this.storageManager);
+        
+        // 初始化计时器管理器
+        this.timerManager = TimerManager.getInstance();
+        await this.timerManager.initialize(this.storageManager);
+        
+        // 初始化专注页面
+        this.focusPage = new FocusPage();
+        this.focusPage.initialize(this.timerManager, this.taskManager);
+        
+        // 初始化拦截器管理器
+        this.blockerManager = BlockerManager.getInstance();
+        await this.blockerManager.initialize(this.timerManager, this.whitelistManager, this.focusPage, this.storageManager);
+        
+        // 处理早期拦截检查的结果
+        if (this.pendingBlocking) {
+            console.log('[TomatoMonkey] Applying pending blocking from early interception check');
+            this.blockerManager.activateBlocking();
         }
+        
+        console.log('[TomatoMonkey] Core modules initialized');
+    }
 
-        /**
-         * 初始化设置面板
-         */
-        initializeSettingsPanel() {
-            // 创建设置面板触发按钮
-            this.createTriggerButton();
-            
-            // 创建设置面板
-            this.settingsPanel = new SettingsPanel();
-            
-            // 初始化 ToDo 列表组件
-            this.initializeTodoList();
+    /**
+     * 初始化设置面板
+     */
+    initializeSettingsPanel() {
+        // 创建设置面板触发按钮
+        this.createTriggerButton();
+        
+        // 创建设置面板
+        this.settingsPanel = new SettingsPanel();
+        
+        // 初始化 ToDo 列表组件
+        this.initializeTodoList();
+    }
+
+    /**
+     * 初始化 ToDo 列表组件
+     */
+    initializeTodoList() {
+        // 获取 ToDo 容器
+        const todoContainer = document.getElementById('todo-container');
+        if (!todoContainer) {
+            console.error('[TomatoMonkey] Todo container not found');
+            return;
         }
+        
+        // 创建 ToDo 列表组件
+        this.todoList = new TodoList(todoContainer, this.taskManager);
+        
+        // 注册组件到设置面板
+        this.settingsPanel.registerTabComponent('todo', this.todoList);
+        
+        console.log('[TomatoMonkey] Todo list initialized');
+    }
 
-        /**
-         * 初始化 ToDo 列表组件
-         */
-        initializeTodoList() {
-            // 获取 ToDo 容器
-            const todoContainer = document.getElementById('todo-container');
-            if (!todoContainer) {
-                console.error('[TomatoMonkey] Todo container not found');
-                return;
-            }
-            
-            // 创建 ToDo 列表组件
-            this.todoList = new TodoList(todoContainer, this.taskManager);
-            
-            // 注册组件到设置面板
-            this.settingsPanel.registerTabComponent('todo', this.todoList);
-            
-            console.log('[TomatoMonkey] Todo list initialized');
+    /**
+     * 创建触发设置面板的按钮
+     */
+    createTriggerButton() {
+        const triggerButton = document.createElement('div');
+        triggerButton.id = 'tomato-monkey-trigger';
+        triggerButton.innerHTML = '🍅';
+        triggerButton.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: #D95550;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 10001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        `;
+        
+        triggerButton.addEventListener('mouseenter', () => {
+            triggerButton.style.transform = 'scale(1.1)';
+            triggerButton.style.boxShadow = '0 6px 16px rgba(217, 85, 80, 0.4)';
+        });
+        
+        triggerButton.addEventListener('mouseleave', () => {
+            triggerButton.style.transform = 'scale(1)';
+            triggerButton.style.boxShadow = '0 4px 12px rgba(217, 85, 80, 0.3)';
+        });
+        
+        triggerButton.addEventListener('click', () => {
+            this.toggleSettingsPanel();
+        });
+
+        document.body.appendChild(triggerButton);
+    }
+
+    /**
+     * 切换设置面板显示状态
+     */
+    toggleSettingsPanel() {
+        if (this.settingsPanel) {
+            this.settingsPanel.toggle();
+        } else {
+            console.log('[TomatoMonkey] Settings panel not initialized yet');
         }
+    }
 
-        /**
-         * 创建触发设置面板的按钮
-         */
-        createTriggerButton() {
-            const triggerButton = document.createElement('div');
-            triggerButton.id = 'tomato-monkey-trigger';
-            triggerButton.innerHTML = '🍅';
-            triggerButton.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                width: 50px;
-                height: 50px;
-                background: #D95550;
-                color: white;
-                border: none;
-                border-radius: 50%;
-                cursor: pointer;
-                z-index: 10001;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 20px;
-                box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
-                transition: transform 0.2s ease, box-shadow 0.2s ease;
-            `;
-            
-            triggerButton.addEventListener('mouseenter', () => {
-                triggerButton.style.transform = 'scale(1.1)';
-                triggerButton.style.boxShadow = '0 6px 16px rgba(217, 85, 80, 0.4)';
-            });
-            
-            triggerButton.addEventListener('mouseleave', () => {
-                triggerButton.style.transform = 'scale(1)';
-                triggerButton.style.boxShadow = '0 4px 12px rgba(217, 85, 80, 0.3)';
-            });
-            
-            triggerButton.addEventListener('click', () => {
+    /**
+     * 设置键盘快捷键
+     */
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Ctrl/Cmd + Shift + T 打开/关闭设置面板
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
+                e.preventDefault();
                 this.toggleSettingsPanel();
-            });
+            }
+        });
+    }
 
-            document.body.appendChild(triggerButton);
-        }
-
-        /**
-         * 切换设置面板显示状态
-         */
-        toggleSettingsPanel() {
+    /**
+     * 注册 Tampermonkey 菜单命令
+     */
+    registerMenuCommands() {
+        // 注册打开设置面板的菜单命令
+        GM_registerMenuCommand('🍅 打开设置面板', () => {
+            this.toggleSettingsPanel();
+        }, 'o');
+        
+        // 注册快速创建任务的菜单命令
+        GM_registerMenuCommand('➕ 快速创建任务', () => {
             if (this.settingsPanel) {
-                this.settingsPanel.toggle();
-            } else {
-                console.log('[TomatoMonkey] Settings panel not initialized yet');
+                this.settingsPanel.show();
+                this.settingsPanel.activateTab('todo');
             }
-        }
-
-        /**
-         * 设置键盘快捷键
-         */
-        setupKeyboardShortcuts() {
-            document.addEventListener('keydown', (e) => {
-                // Ctrl/Cmd + Shift + T 打开/关闭设置面板
-                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
-                    e.preventDefault();
-                    this.toggleSettingsPanel();
-                }
-            });
-        }
-
-        /**
-         * 注册 Tampermonkey 菜单命令
-         */
-        registerMenuCommands() {
-            // 注册打开设置面板的菜单命令
-            GM_registerMenuCommand('🍅 打开设置面板', () => {
-                this.toggleSettingsPanel();
-            }, 'o');
-            
-            // 注册快速创建任务的菜单命令
-            GM_registerMenuCommand('➕ 快速创建任务', () => {
-                if (this.settingsPanel) {
-                    this.settingsPanel.show();
-                    this.settingsPanel.activateTab('todo');
-                }
-            }, 'n');
-            
-            console.log('[TomatoMonkey] Menu commands registered');
-        }
-
-        /**
-         * 获取应用程序实例
-         */
-        static getInstance() {
-            if (!TomatoMonkeyApp.instance) {
-                TomatoMonkeyApp.instance = new TomatoMonkeyApp();
-            }
-            return TomatoMonkeyApp.instance;
-        }
+        }, 'n');
+        
+        console.log('[TomatoMonkey] Menu commands registered');
     }
 
-    // 启动应用程序
-    const app = TomatoMonkeyApp.getInstance();
-    app.init();
-
-    // 将应用程序实例暴露到页面作用域以便调试
-    // 使用 unsafeWindow 确保测试页面可以访问
-    if (typeof unsafeWindow !== 'undefined') {
-        unsafeWindow.TomatoMonkeyApp = app;
-    } else {
-        window.TomatoMonkeyApp = app;
+    /**
+     * 获取应用程序实例
+     */
+    static getInstance() {
+        if (!TomatoMonkeyApp.instance) {
+            TomatoMonkeyApp.instance = new TomatoMonkeyApp();
+        }
+        return TomatoMonkeyApp.instance;
     }
+}
+
+// 启动应用程序
+const app = TomatoMonkeyApp.getInstance();
+app.init();
+
+// 将应用程序实例暴露到页面作用域以便调试
+// 使用 unsafeWindow 确保测试页面可以访问
+if (typeof unsafeWindow !== 'undefined') {
+    unsafeWindow.TomatoMonkeyApp = app;
+} else {
+    window.TomatoMonkeyApp = app;
+}
 
 })();
