@@ -1,33 +1,26 @@
 /**
- * BlockerManager - 网站拦截逻辑管理器
+ * BlockerFeature - Linus式依赖注入拦截功能
  *
- * 负责：
+ * 职责：
  * 1. 网站拦截逻辑的核心处理
- * 2. 与WhitelistManager集成的URL匹配检查
- * 3. 与TimerManager的状态同步和监听
- * 4. 与FocusPage的显示控制集成
+ * 2. URL匹配检查和白名单集成
+ * 3. 计时器状态同步和监听
+ * 4. 专注页面显示控制
  * 5. 跨标签页拦截状态同步
  * 6. 页面加载拦截的生命周期管理
- * 7. 修复TimerManager跨标签页同步缺陷的工作方案
  */
 
-class BlockerManager {
-  constructor() {
-    // 单例模式
-    if (BlockerManager.instance) {
-      return BlockerManager.instance;
-    }
-    BlockerManager.instance = this;
+class BlockerFeature {
+  constructor(timerService, whitelistManager, focusPage, storage) {
+    // 依赖注入 - 显式优于隐式
+    this.timerService = timerService;
+    this.whitelistManager = whitelistManager;
+    this.focusPage = focusPage;
+    this.storage = storage;
 
     // 拦截器状态
     this.isActive = false;
     this.isCurrentPageBlocked = false;
-
-    // 管理器引用
-    this.timerManager = null;
-    this.whitelistManager = null;
-    this.focusPage = null;
-    this.storageManager = null;
 
     // 观察者回调绑定
     this.boundTimerObserver = this.handleTimerEvent.bind(this);
@@ -39,7 +32,7 @@ class BlockerManager {
     this.urlMatchCache = new Map();
     this.cacheExpiryTime = 5 * 60 * 1000; // 5分钟缓存过期
 
-    console.log("[BlockerManager] Created");
+    console.log("[BlockerFeature] Created");
   }
 
   /**
@@ -49,15 +42,16 @@ class BlockerManager {
    * @param {FocusPage} focusPage - 专注页面组件实例
    * @param {StorageManager} storageManager - 存储管理器实例
    */
-  async initialize(timerManager, whitelistManager, focusPage, storageManager) {
+  async initialize(timerManager = null, whitelistManager = null, focusPage = null, storageManager = null) {
     if (this.initialized) {
       return;
     }
 
-    this.timerManager = timerManager;
-    this.whitelistManager = whitelistManager;
-    this.focusPage = focusPage;
-    this.storageManager = storageManager;
+    // 兼容旧API：如果传入参数，使用它们；否则使用注入的依赖
+    if (timerManager) this.timerService = timerManager;
+    if (whitelistManager) this.whitelistManager = whitelistManager;
+    if (focusPage) this.focusPage = focusPage;
+    if (storageManager) this.storage = storageManager;
 
     // 监听计时器状态变化
     this.bindTimerManager();
@@ -69,23 +63,23 @@ class BlockerManager {
     this.setupCrossTabSync();
 
     this.initialized = true;
-    console.log("[BlockerManager] Initialized successfully");
+    console.log("[BlockerFeature] Initialized successfully");
   }
 
   /**
    * 绑定计时器管理器事件
    */
   bindTimerManager() {
-    if (!this.timerManager) return;
-    this.timerManager.addObserver(this.boundTimerObserver);
+    if (!this.timerService) return;
+    this.timerService.addObserver(this.boundTimerObserver);
   }
 
   /**
    * 解绑计时器管理器事件
    */
   unbindTimerManager() {
-    if (!this.timerManager) return;
-    this.timerManager.removeObserver(this.boundTimerObserver);
+    if (!this.timerService) return;
+    this.timerService.removeObserver(this.boundTimerObserver);
   }
 
   /**
@@ -113,18 +107,18 @@ class BlockerManager {
    */
   async activateBlocking(newSession = false) {
     this.isActive = true;
-    console.log(`[BlockerManager] Blocking activated (newSession: ${newSession})`);
+    console.log(`[BlockerFeature] Blocking activated (newSession: ${newSession})`);
 
     // 只有在新计时器会话开始时才清除临时跳过域名列表
     if (newSession) {
       this.temporarySkipDomains = new Set();
-      console.log("[BlockerManager] Temporary skip domains cleared for new session");
+      console.log("[BlockerFeature] Temporary skip domains cleared for new session");
     } else {
       // 保持现有的临时跳过域名列表
       if (!this.temporarySkipDomains) {
         this.temporarySkipDomains = new Set();
       }
-      console.log(`[BlockerManager] Maintaining temporary skip domains: ${Array.from(this.temporarySkipDomains).join(', ')}`);
+      console.log(`[BlockerFeature] Maintaining temporary skip domains: ${Array.from(this.temporarySkipDomains).join(', ')}`);
     }
 
     // 检查当前页面是否需要拦截
@@ -190,7 +184,7 @@ class BlockerManager {
    */
   blockCurrentPage() {
     this.isCurrentPageBlocked = true;
-    console.log(`[BlockerManager] Blocking current page: ${window.location.href}`);
+    console.log(`[BlockerFeature] Blocking current page: ${window.location.href}`);
 
     // 🚨 关键修复：直接调用FocusPage.show()绕过TimerManager同步缺陷
     if (this.focusPage) {
@@ -205,7 +199,7 @@ class BlockerManager {
    */
   unblockCurrentPage() {
     this.isCurrentPageBlocked = false;
-    console.log(`[BlockerManager] Unblocking current page: ${window.location.href}`);
+    console.log(`[BlockerFeature] Unblocking current page: ${window.location.href}`);
 
     if (this.focusPage && this.focusPage.isPageVisible()) {
       this.focusPage.hide();
@@ -241,7 +235,7 @@ class BlockerManager {
     
     // 防御性检查：确保container有必要的方法
     if (typeof container.querySelectorAll !== 'function' || typeof container.querySelector !== 'function') {
-      console.warn("[BlockerManager] Container missing required DOM methods");
+      console.warn("[BlockerFeature] Container missing required DOM methods");
       return;
     }
     
@@ -304,7 +298,7 @@ class BlockerManager {
             return false;
           }
         } catch (error) {
-          console.warn("[BlockerManager] Invalid URL for skip domain check:", url);
+          console.warn("[BlockerFeature] Invalid URL for skip domain check:", url);
         }
       }
 
@@ -323,7 +317,7 @@ class BlockerManager {
       return shouldBlock;
 
     } catch (error) {
-      console.error("[BlockerManager] Error checking URL blocking:", error);
+      console.error("[BlockerFeature] Error checking URL blocking:", error);
       return false; // 出错时不拦截
     }
   }
@@ -372,24 +366,24 @@ class BlockerManager {
    * 保存拦截器状态
    */
   saveBlockerState() {
-    if (!this.storageManager) return;
+    if (!this.storage) return;
 
     const state = {
       isActive: this.isActive,
       timestamp: Date.now()
     };
 
-    this.storageManager.setData("blockerState", state);
+    this.storage.setData("blockerState", state);
   }
 
   /**
    * 恢复拦截器状态
    */
   async restoreBlockerState() {
-    if (!this.storageManager) return;
+    if (!this.storage) return;
 
     try {
-      const state = this.storageManager.getData("blockerState");
+      const state = this.storage.getData("blockerState");
       if (state && typeof state.isActive === 'boolean') {
         this.isActive = state.isActive;
         
@@ -397,10 +391,10 @@ class BlockerManager {
           await this.checkCurrentPageBlocking();
         }
         
-        console.log(`[BlockerManager] State restored: active=${this.isActive}`);
+        console.log(`[BlockerFeature] State restored: active=${this.isActive}`);
       }
     } catch (error) {
-      console.error("[BlockerManager] Failed to restore blocker state:", error);
+      console.error("[BlockerFeature] Failed to restore blocker state:", error);
     }
   }
 
@@ -468,7 +462,7 @@ class BlockerManager {
         console.log('🔄 [RemoteStateChange] No action needed for state:', newState);
       }
     } catch (error) {
-      console.error("[BlockerManager] Error handling remote timer state change:", error);
+      console.error("[BlockerFeature] Error handling remote timer state change:", error);
     }
   }
 
@@ -477,8 +471,8 @@ class BlockerManager {
    */
   async handleWindowFocus() {
     // 当标签页获得焦点时，检查拦截状态
-    if (this.timerManager) {
-      const timerState = this.timerManager.getTimerState();
+    if (this.timerService) {
+      const timerState = this.timerService.getTimerState();
       if (timerState.status === 'running' && !this.isActive) {
         this.activateBlocking(false); // 窗口焦点激活，保持临时跳过域名
       } else if (timerState.status !== 'running' && this.isActive) {
@@ -492,7 +486,7 @@ class BlockerManager {
    */
   clearCache() {
     this.urlMatchCache.clear();
-    console.log("[BlockerManager] URL match cache cleared");
+    console.log("[BlockerFeature] URL match cache cleared");
   }
 
   /**
@@ -500,7 +494,7 @@ class BlockerManager {
    */
   async addCurrentDomainToWhitelist() {
     if (!this.whitelistManager) {
-      console.warn("[BlockerManager] WhitelistManager not available");
+      console.warn("[BlockerFeature] WhitelistManager not available");
       return false;
     }
 
@@ -509,7 +503,7 @@ class BlockerManager {
       const success = await this.whitelistManager.addDomain(currentDomain);
       
       if (success) {
-        console.log(`[BlockerManager] Added ${currentDomain} to whitelist`);
+        console.log(`[BlockerFeature] Added ${currentDomain} to whitelist`);
         
         // 清除缓存并重新检查当前页面
         this.clearCache();
@@ -517,11 +511,11 @@ class BlockerManager {
         
         return true;
       } else {
-        console.warn(`[BlockerManager] Failed to add ${currentDomain} to whitelist`);
+        console.warn(`[BlockerFeature] Failed to add ${currentDomain} to whitelist`);
         return false;
       }
     } catch (error) {
-      console.error("[BlockerManager] Error adding domain to whitelist:", error);
+      console.error("[BlockerFeature] Error adding domain to whitelist:", error);
       return false;
     }
   }
@@ -532,7 +526,7 @@ class BlockerManager {
    */
   handleSkipBlocking(url) {
     if (!this.isCurrentPageBlocked) {
-      console.warn("[BlockerManager] Current page is not blocked, skip ignored");
+      console.warn("[BlockerFeature] Current page is not blocked, skip ignored");
       return;
     }
 
@@ -544,11 +538,11 @@ class BlockerManager {
       const urlObj = new URL(targetUrl);
       currentDomain = urlObj.hostname;
     } catch (error) {
-      console.warn("[BlockerManager] Invalid URL for skip blocking:", targetUrl);
+      console.warn("[BlockerFeature] Invalid URL for skip blocking:", targetUrl);
       currentDomain = window.location.hostname;
     }
     
-    console.log(`[BlockerManager] Skipping blocking for page: ${targetUrl}`);
+    console.log(`[BlockerFeature] Skipping blocking for page: ${targetUrl}`);
     
     // 临时将当前域名添加到跳过列表 (仅当前计时器会话有效)
     if (!this.temporarySkipDomains) {
@@ -563,7 +557,7 @@ class BlockerManager {
     // 解除当前页面拦截
     this.unblockCurrentPage();
     
-    console.log(`[BlockerManager] Temporarily skipped blocking for domain: ${currentDomain}`);
+    console.log(`[BlockerFeature] Temporarily skipped blocking for domain: ${currentDomain}`);
   }
 
   /**
@@ -581,9 +575,57 @@ class BlockerManager {
   }
 
   /**
-   * 获取单例实例
-   * @returns {BlockerManager} 拦截器管理器实例
+   * 销毁拦截功能
    */
+  destroy() {
+    this.unbindTimerManager();
+    this.deactivateBlocking();
+    this.clearCache();
+    
+    this.timerService = null;
+    this.whitelistManager = null;
+    this.focusPage = null;
+    this.storage = null;
+    
+    console.log("[BlockerFeature] Destroyed");
+  }
+}
+
+// === 兼容性层 - Linus原则: Never break userspace ===
+
+/**
+ * BlockerManager兼容类 - 包装BlockerFeature以模拟单例行为
+ */
+class BlockerManager {
+  constructor() {
+    if (BlockerManager.instance) {
+      return BlockerManager.instance;
+    }
+    
+    // 创建默认依赖（临时解决方案）
+    const defaultStorage = typeof Storage !== 'undefined' 
+      ? new Storage() 
+      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
+    
+    this._blockerFeature = new BlockerFeature(null, null, null, defaultStorage);
+    BlockerManager.instance = this;
+    return this;
+  }
+
+  // 代理所有方法到BlockerFeature
+  async initialize(timerManager, whitelistManager, focusPage, storageManager) {
+    return this._blockerFeature.initialize(timerManager, whitelistManager, focusPage, storageManager);
+  }
+  activateBlocking(byTimer = false) { return this._blockerFeature.activateBlocking(byTimer); }
+  deactivateBlocking() { return this._blockerFeature.deactivateBlocking(); }
+  blockCurrentPage() { return this._blockerFeature.blockCurrentPage(); }
+  unblockCurrentPage() { return this._blockerFeature.unblockCurrentPage(); }
+  shouldBlockUrl(url = null) { return this._blockerFeature.shouldBlockUrl(url); }
+  handleSkipBlocking(url) { return this._blockerFeature.handleSkipBlocking(url); }
+  getBlockingInfo() { return this._blockerFeature.getBlockingInfo(); }
+  clearCache() { return this._blockerFeature.clearCache(); }
+  destroy() { return this._blockerFeature.destroy(); }
+
   static getInstance() {
     if (!BlockerManager.instance) {
       BlockerManager.instance = new BlockerManager();
@@ -591,36 +633,29 @@ class BlockerManager {
     return BlockerManager.instance;
   }
 
-  /**
-   * 销毁拦截器管理器
-   */
-  destroy() {
-    this.unbindTimerManager();
-    this.deactivateBlocking();
-    this.clearCache();
-    
-    this.timerManager = null;
-    this.whitelistManager = null;
-    this.focusPage = null;
-    this.storageManager = null;
-    
-    console.log("[BlockerManager] Destroyed");
+  static resetInstance() {
+    BlockerManager.instance = null;
   }
 }
 
-// 创建单例实例
-const blockerManager = new BlockerManager();
+// 创建兼容实例
+const blockerManager = BlockerManager.getInstance();
 
-// 全局对象暴露
+// 浏览器环境导出
 if (typeof window !== "undefined") {
-  window.BlockerManager = BlockerManager;
-  window.blockerManager = blockerManager;
+  window.BlockerFeature = BlockerFeature;     // 新API
+  window.BlockerManager = BlockerManager;     // 兼容API
+  window.blockerManager = blockerManager;     // 兼容实例
 }
 
-// 模块导出 (支持 CommonJS 和 ES6)
+// 模块导出
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { BlockerManager, blockerManager };
+  module.exports = { 
+    BlockerFeature,                           // 新API
+    BlockerManager, blockerManager,           // 兼容API
+  };
 } else if (typeof exports !== "undefined") {
-  exports.BlockerManager = BlockerManager;
-  exports.blockerManager = blockerManager;
+  exports.BlockerFeature = BlockerFeature;   // 新API
+  exports.BlockerManager = BlockerManager;   // 兼容API
+  exports.blockerManager = blockerManager;   // 兼容实例
 }

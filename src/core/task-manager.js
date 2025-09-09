@@ -1,46 +1,44 @@
 /**
- * TaskManager - Linus 式简洁实现，兼容原有API
+ * TaskService - Linus 式依赖注入任务服务
  * 
  * Linus 原则:
  * 1. 数据结构决定一切 - 内部用Map，接口保持兼容
  * 2. Never break userspace - 保持所有现有API
  * 3. 失败就失败 - 不要假装能恢复
- * 4. 简单内核，兼容外壳
+ * 4. 显式依赖，简洁内核
  */
 
-class TaskManager {
-  constructor() {
-    if (TaskManager.instance) {
-      return TaskManager.instance;
-    }
-
+class TaskService {
+  constructor(storage) {
+    // 依赖注入 - 显式优于隐式
+    this.storage = storage;
+    
     // 核心数据结构 - Linus方式
     this.tasks = new Map();
     this.observers = new Set(); // 观察者用Set，避免重复
-    this.storageManager = null;
     this.isInitialized = false;
-
-    TaskManager.instance = this;
-    return this;
   }
 
   // === 兼容性API - 保持现有接口不变 ===
 
-  async initialize(storageManager) {
+  async initialize(storageManager = null) {
     if (this.isInitialized) return;
 
-    this.storageManager = storageManager;
+    // 兼容旧API：如果传入storageManager，使用它；否则使用注入的storage
+    if (storageManager) {
+      this.storage = storageManager;
+    }
     
     try {
-      const data = await this.storageManager.loadTasks();
+      const data = await this.storage.loadTasks();
       // 内部用Map，但兼容数组输入
       this.tasks = new Map(data.map(t => [t.id, t]));
       
       this.isInitialized = true;
-      console.log(`[TaskManager] Initialized with ${this.tasks.size} tasks`);
+      console.log(`[TaskService] Initialized with ${this.tasks.size} tasks`);
       this.notifyObservers("initialized");
     } catch (error) {
-      console.error("[TaskManager] Failed to initialize:", error);
+      console.error("[TaskService] Failed to initialize:", error);
       this.tasks = new Map();
     }
   }
@@ -239,7 +237,68 @@ class TaskManager {
     }
   }
 
-  // === 单例模式API - 保持兼容 ===
+  // === 内部实现辅助方法 ===
+
+  async saveTasks() {
+    // 兼容性方法，内部调用save()
+    return await this.save();
+  }
+
+  async save() {
+    if (!this.storage) {
+      console.error("[TaskService] Storage not initialized");
+      return false;
+    }
+
+    try {
+      // 转换Map为Array只在保存时
+      const data = Array.from(this.tasks.values());
+      return await this.storage.saveTasks(data);
+    } catch (error) {
+      console.error("[TaskService] Failed to save tasks:", error);
+      return false;
+    }
+  }
+}
+
+// === 兼容性层 - Linus原则: Never break userspace ===
+
+/**
+ * TaskManager兼容类 - 包装TaskService以模拟单例行为
+ */
+class TaskManager {
+  constructor() {
+    if (TaskManager.instance) {
+      return TaskManager.instance;
+    }
+    
+    // 创建默认storage（临时解决方案）
+    const defaultStorage = typeof Storage !== 'undefined' 
+      ? new Storage() 
+      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
+    
+    this._taskService = new TaskService(defaultStorage);
+    TaskManager.instance = this;
+    return this;
+  }
+
+  // 代理所有方法到TaskService
+  async initialize(storageManager) { return this._taskService.initialize(storageManager); }
+  async createTask(title) { return this._taskService.createTask(title); }
+  getAllTasks() { return this._taskService.getAllTasks(); }
+  getTaskById(taskId) { return this._taskService.getTaskById(taskId); }
+  getPendingTasks() { return this._taskService.getPendingTasks(); }
+  getCompletedTasks() { return this._taskService.getCompletedTasks(); }
+  async updateTaskTitle(taskId, newTitle) { return this._taskService.updateTaskTitle(taskId, newTitle); }
+  async toggleTaskCompletion(taskId) { return this._taskService.toggleTaskCompletion(taskId); }
+  async deleteTask(taskId) { return this._taskService.deleteTask(taskId); }
+  async incrementPomodoroCount(taskId, count) { return this._taskService.incrementPomodoroCount(taskId, count); }
+  async clearCompletedTasks() { return this._taskService.clearCompletedTasks(); }
+  getStatistics() { return this._taskService.getStatistics(); }
+  addObserver(observer) { return this._taskService.addObserver(observer); }
+  removeObserver(observer) { return this._taskService.removeObserver(observer); }
+  notifyObservers(event, data) { return this._taskService.notifyObservers(event, data); }
+  async saveTasks() { return this._taskService.saveTasks(); }
 
   static getInstance() {
     if (!TaskManager.instance) {
@@ -253,19 +312,24 @@ class TaskManager {
   }
 }
 
-// 创建单例实例 - 保持完全兼容
+// 创建兼容实例
 const taskManager = TaskManager.getInstance();
 
-// 浏览器环境兼容
+// 浏览器环境导出
 if (typeof window !== "undefined") {
-  window.TaskManager = TaskManager;
-  window.taskManager = taskManager;
+  window.TaskService = TaskService;     // 新API
+  window.TaskManager = TaskManager;     // 兼容API
+  window.taskManager = taskManager;     // 兼容实例
 }
 
-// 模块导出兼容
+// 模块导出
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { TaskManager, taskManager };
+  module.exports = { 
+    TaskService,                        // 新API
+    TaskManager, taskManager,           // 兼容API
+  };
 } else if (typeof exports !== "undefined") {
-  exports.TaskManager = TaskManager;
-  exports.taskManager = taskManager;
+  exports.TaskService = TaskService;    // 新API
+  exports.TaskManager = TaskManager;    // 兼容API
+  exports.taskManager = taskManager;    // 兼容实例
 }

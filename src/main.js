@@ -7,34 +7,6 @@
  * 3. 启动应用程序
  */
 
-/**
- * AppCore - 模块生命周期管理器
- * 职责：只管理模块注册和初始化，不管其他任何事
- */
-class AppCore {
-    constructor() {
-        this.modules = new Map();
-        this.initialized = false;
-    }
-    
-    register(name, module) {
-        this.modules.set(name, module);
-        return this;
-    }
-    
-    get(name) {
-        return this.modules.get(name);
-    }
-    
-    async initialize() {
-        for (const [name, module] of this.modules) {
-            if (typeof module.initialize === 'function') {
-                await module.initialize();
-            }
-        }
-        this.initialized = true;
-    }
-}
 
 /**
  * PageInterceptor - 页面拦截逻辑
@@ -135,20 +107,23 @@ class UIController {
 }
 
 /**
- * TomatoMonkeyApp - 轻量级应用程序控制器
- * 职责：协调各个组件，保持向后兼容
+ * TomatoMonkeyApp - Linus式应用程序控制器
+ * 职责：协调各个组件，使用依赖注入容器
  */
 class TomatoMonkeyApp {
     constructor() {
-        this.core = new AppCore();
+        // 使用Application依赖注入容器
+        this.app = new Application();
         this.initialized = false;
+        
+        console.log('[TomatoMonkey] Created app with DI container');
     }
 
     async init() {
         if (this.initialized) return;
 
         try {
-            console.log('[TomatoMonkey] Initializing application...');
+            console.log('[TomatoMonkey] Initializing application with DI container...');
             
             // 等待DOM，一行搞定
             await this.waitForDOM();
@@ -156,11 +131,8 @@ class TomatoMonkeyApp {
             // 加载样式
             this.loadStyles();
             
-            // 声明式模块注册，顺序即依赖
-            this.registerModules();
-            
-            // 初始化所有模块
-            await this.core.initialize();
+            // 初始化Application容器
+            await this.app.initialize();
             
             // 设置UI
             this.setupUI();
@@ -169,7 +141,7 @@ class TomatoMonkeyApp {
             this.checkInterception();
 
             this.initialized = true;
-            console.log('[TomatoMonkey] Application initialized successfully');
+            console.log('[TomatoMonkey] Application initialized successfully with DI');
             
         } catch (error) {
             console.error('[TomatoMonkey] Failed to initialize application:', error);
@@ -181,108 +153,43 @@ class TomatoMonkeyApp {
         return new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
     }
     
-    registerModules() {
-        // 模块定义表：[名称, 类, 依赖]
-        const modules = [
-            ['storage', new StorageManager()],
-            ['whitelist', this.createWhitelistManager()],
-            ['task', this.createTaskManager()],
-            ['timer', this.createTimerManager()],
-            ['focus', this.createFocusPage()],
-            ['blocker', this.createBlockerManager()],
-            ['interceptor', this.createPageInterceptor()],
-            ['settings', this.createSettingsPanel()],
-            ['ui', this.createUIController()]
-        ];
-        
-        modules.forEach(([name, instance]) => {
-            this.core.register(name, instance);
-        });
-    }
     
-    createWhitelistManager() {
-        const manager = new WhitelistManager();
-        const storage = this.core.get('storage');
-        manager.initialize = async () => await manager.initialize(storage);
-        return manager;
-    }
-    
-    createTaskManager() {
-        const manager = TaskManager.getInstance();
-        const storage = this.core.get('storage');
-        manager.initialize = async () => await manager.initialize(storage);
-        return manager;
-    }
-    
-    createTimerManager() {
-        const manager = TimerManager.getInstance();
-        const storage = this.core.get('storage');
-        manager.initialize = async () => await manager.initialize(storage);
-        return manager;
-    }
-    
-    createFocusPage() {
-        const focus = new FocusPage();
-        focus.initialize = async () => {
-            const timer = this.core.get('timer');
-            const task = this.core.get('task');
-            focus.initialize(timer, task);
-        };
-        return focus;
-    }
-    
-    createBlockerManager() {
-        const blocker = BlockerManager.getInstance();
-        blocker.initialize = async () => {
-            const timer = this.core.get('timer');
-            const whitelist = this.core.get('whitelist');
-            const focus = this.core.get('focus');
-            const storage = this.core.get('storage');
-            await blocker.initialize(timer, whitelist, focus, storage);
-        };
-        return blocker;
-    }
-    
-    createPageInterceptor() {
-        const storage = this.core.get('storage');
-        const whitelist = this.core.get('whitelist');
-        return new PageInterceptor(storage, whitelist);
-    }
-    
-    createSettingsPanel() {
-        return new SettingsPanel();
-    }
-    
-    createUIController() {
-        const ui = new UIController();
-        ui.initialize = async () => {
-            const settings = this.core.get('settings');
-            const task = this.core.get('task');
-            ui.settingsPanel = settings;
-            ui.taskManager = task;
-            ui.setupUI();
-            
-            // 初始化TodoList
-            const todoContainer = document.getElementById('todo-container');
-            if (todoContainer) {
-                ui.todoList = new TodoList(todoContainer, task);
-                settings.registerTabComponent('todo', ui.todoList);
-            }
-        };
-        return ui;
-    }
+    // 原create方法已移至Application容器，此处保留兼容接口
     
     setupUI() {
-        // 由UIController处理，保持接口兼容
-        this.settingsPanel = this.core.get('settings');
-        this.taskManager = this.core.get('task');
+        console.log('[TomatoMonkey] Setting up UI...');
+        
+        // 直接使用DI容器的服务
+        this.settingsPanel = this.app.settingsPanel;
+        this.taskManager = this.app.taskService;
+        
+        // 创建UI控制器
+        const ui = new UIController(this.app.settingsPanel, this.app.taskService);
+        ui.setupUI();
+        
+        // 创建TodoList组件
+        this.setupTodoList();
+        
+        console.log('[TomatoMonkey] UI setup complete');
+    }
+    
+    setupTodoList() {
+        // 等待DOM元素创建
+        setTimeout(() => {
+            const todoContainer = document.getElementById('todo-container');
+            if (todoContainer) {
+                const todoList = this.app.createTodoList(todoContainer);
+                this.app.settingsPanel.registerTabComponent('todo', todoList);
+                console.log('[TomatoMonkey] TodoList component created');
+            }
+        }, 100);
     }
     
     checkInterception() {
-        const interceptor = this.core.get('interceptor');
+        // 创建页面拦截器
+        const interceptor = new PageInterceptor(this.app.storage, this.app.whitelistManager);
         if (interceptor.shouldBlockPage()) {
-            const blocker = this.core.get('blocker');
-            blocker.activateBlocking();
+            this.app.blockerFeature.activateBlocking();
         }
     }
 

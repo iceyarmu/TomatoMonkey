@@ -23,25 +23,219 @@
     // ========== 核心模块 ==========
     
     /**
-     * BlockerManager - 网站拦截逻辑管理器
+     * Application - Linus式依赖注入容器
      */
-    class BlockerManager {
+    class Application {
   constructor() {
-    // 单例模式
-    if (BlockerManager.instance) {
-      return BlockerManager.instance;
+    // 核心服务层
+    this.storage = null;
+    this.eventBus = null;
+    
+    // 业务服务层
+    this.taskService = null;
+    this.timerService = null;
+    this.whitelistManager = null;
+    
+    // 功能层
+    this.blockerFeature = null;
+    
+    // UI层
+    this.settingsPanel = null;
+    this.todoList = null;
+    this.focusPage = null;
+    
+    this.initialized = false;
+    console.log("[Application] Created DI container");
+  }
+
+  /**
+   * 初始化应用程序 - Linus式依赖创建
+   */
+  async initialize() {
+    if (this.initialized) return;
+
+    try {
+      console.log("[Application] Initializing dependency injection container...");
+      
+      // 第一层：核心服务（无依赖）
+      this.createCoreServices();
+      
+      // 第二层：业务服务（依赖核心服务）
+      this.createBusinessServices();
+      
+      // 第三层：功能模块（依赖业务服务）
+      this.createFeatures();
+      
+      // 第四层：UI组件（依赖功能模块）
+      this.createUIComponents();
+      
+      // 初始化所有服务
+      await this.initializeServices();
+      
+      this.initialized = true;
+      console.log("[Application] DI container initialized successfully");
+      
+    } catch (error) {
+      console.error("[Application] Failed to initialize:", error);
+      throw error;
     }
-    BlockerManager.instance = this;
+  }
+
+  /**
+   * 创建核心服务层 - 无依赖
+   */
+  createCoreServices() {
+    console.log("[Application] Creating core services...");
+    
+    // Storage - 数据持久化服务
+    this.storage = new Storage();
+    
+    // EventBus - 事件总线
+    this.eventBus = new EventBus();
+    
+    console.log("[Application] Core services created");
+  }
+
+  /**
+   * 创建业务服务层 - 依赖核心服务
+   */
+  createBusinessServices() {
+    console.log("[Application] Creating business services...");
+    
+    // TaskService - 任务管理服务
+    this.taskService = new TaskService(this.storage);
+    
+    // TimerService - 计时器服务
+    this.timerService = new TimerService(this.storage);
+    
+    // WhitelistManager - 白名单管理（暂时保持原样）
+    this.whitelistManager = new WhitelistManager();
+    
+    console.log("[Application] Business services created");
+  }
+
+  /**
+   * 创建功能层 - 依赖业务服务
+   */
+  createFeatures() {
+    console.log("[Application] Creating feature modules...");
+    
+    // FocusPage - 专注页面组件
+    this.focusPage = new FocusPage();
+    
+    // BlockerFeature - 拦截功能
+    this.blockerFeature = new BlockerFeature(
+      this.timerService,
+      this.whitelistManager, 
+      this.focusPage,
+      this.storage
+    );
+    
+    console.log("[Application] Feature modules created");
+  }
+
+  /**
+   * 创建UI组件层 - 依赖功能模块和业务服务
+   */
+  createUIComponents() {
+    console.log("[Application] Creating UI components...");
+    
+    // SettingsPanel - 设置面板
+    this.settingsPanel = new SettingsPanel();
+    
+    // 注意：TodoList需要容器元素，在main.js中创建
+    
+    console.log("[Application] UI components created");
+  }
+
+  /**
+   * 初始化所有服务 - 按依赖顺序
+   */
+  async initializeServices() {
+    console.log("[Application] Initializing services in dependency order...");
+    
+    // 初始化核心服务
+    // Storage 无需初始化
+    
+    // 初始化业务服务
+    await this.taskService.initialize();
+    await this.timerService.initialize();
+    await this.whitelistManager.initialize(this.storage);
+    
+    // 初始化功能层
+    this.focusPage.initialize(this.timerService, this.taskService);
+    await this.blockerFeature.initialize();
+    
+    // 初始化UI层（在main.js中处理）
+    
+    console.log("[Application] All services initialized");
+  }
+
+  /**
+   * 获取服务实例 - 简单的服务定位器
+   */
+  getService(name) {
+    const service = this[name];
+    if (!service) {
+      throw new Error(`[Application] Service '${name}' not found`);
+    }
+    return service;
+  }
+
+  /**
+   * 销毁应用程序
+   */
+  destroy() {
+    console.log("[Application] Destroying DI container...");
+    
+    // 销毁顺序与创建顺序相反
+    if (this.todoList) this.todoList.destroy();
+    if (this.settingsPanel) this.settingsPanel.destroy();
+    
+    if (this.blockerFeature) this.blockerFeature.destroy();
+    if (this.focusPage) this.focusPage.destroy();
+    
+    if (this.timerService) this.timerService.destroy();
+    // TaskService 和 Storage 无需特殊销毁
+    
+    this.initialized = false;
+    console.log("[Application] DI container destroyed");
+  }
+
+  /**
+   * 创建TodoList - 需要DOM元素
+   */
+  createTodoList(container) {
+    if (!container) {
+      throw new Error("[Application] TodoList container required");
+    }
+    
+    this.todoList = new TodoList(container, this.taskService);
+    return this.todoList;
+  }
+}
+
+// 浏览器环境导出
+if (typeof window !== "undefined") {
+  window.Application = Application;
+}
+
+// 模块导出
+
+    /**
+     * BlockerFeature - Linus式依赖注入拦截功能
+     */
+    class BlockerFeature {
+  constructor(timerService, whitelistManager, focusPage, storage) {
+    // 依赖注入 - 显式优于隐式
+    this.timerService = timerService;
+    this.whitelistManager = whitelistManager;
+    this.focusPage = focusPage;
+    this.storage = storage;
 
     // 拦截器状态
     this.isActive = false;
     this.isCurrentPageBlocked = false;
-
-    // 管理器引用
-    this.timerManager = null;
-    this.whitelistManager = null;
-    this.focusPage = null;
-    this.storageManager = null;
 
     // 观察者回调绑定
     this.boundTimerObserver = this.handleTimerEvent.bind(this);
@@ -53,7 +247,7 @@
     this.urlMatchCache = new Map();
     this.cacheExpiryTime = 5 * 60 * 1000; // 5分钟缓存过期
 
-    console.log("[BlockerManager] Created");
+    console.log("[BlockerFeature] Created");
   }
 
   /**
@@ -63,15 +257,16 @@
    * @param {FocusPage} focusPage - 专注页面组件实例
    * @param {StorageManager} storageManager - 存储管理器实例
    */
-  async initialize(timerManager, whitelistManager, focusPage, storageManager) {
+  async initialize(timerManager = null, whitelistManager = null, focusPage = null, storageManager = null) {
     if (this.initialized) {
       return;
     }
 
-    this.timerManager = timerManager;
-    this.whitelistManager = whitelistManager;
-    this.focusPage = focusPage;
-    this.storageManager = storageManager;
+    // 兼容旧API：如果传入参数，使用它们；否则使用注入的依赖
+    if (timerManager) this.timerService = timerManager;
+    if (whitelistManager) this.whitelistManager = whitelistManager;
+    if (focusPage) this.focusPage = focusPage;
+    if (storageManager) this.storage = storageManager;
 
     // 监听计时器状态变化
     this.bindTimerManager();
@@ -83,23 +278,23 @@
     this.setupCrossTabSync();
 
     this.initialized = true;
-    console.log("[BlockerManager] Initialized successfully");
+    console.log("[BlockerFeature] Initialized successfully");
   }
 
   /**
    * 绑定计时器管理器事件
    */
   bindTimerManager() {
-    if (!this.timerManager) return;
-    this.timerManager.addObserver(this.boundTimerObserver);
+    if (!this.timerService) return;
+    this.timerService.addObserver(this.boundTimerObserver);
   }
 
   /**
    * 解绑计时器管理器事件
    */
   unbindTimerManager() {
-    if (!this.timerManager) return;
-    this.timerManager.removeObserver(this.boundTimerObserver);
+    if (!this.timerService) return;
+    this.timerService.removeObserver(this.boundTimerObserver);
   }
 
   /**
@@ -127,18 +322,18 @@
    */
   async activateBlocking(newSession = false) {
     this.isActive = true;
-    console.log(`[BlockerManager] Blocking activated (newSession: ${newSession})`);
+    console.log(`[BlockerFeature] Blocking activated (newSession: ${newSession})`);
 
     // 只有在新计时器会话开始时才清除临时跳过域名列表
     if (newSession) {
       this.temporarySkipDomains = new Set();
-      console.log("[BlockerManager] Temporary skip domains cleared for new session");
+      console.log("[BlockerFeature] Temporary skip domains cleared for new session");
     } else {
       // 保持现有的临时跳过域名列表
       if (!this.temporarySkipDomains) {
         this.temporarySkipDomains = new Set();
       }
-      console.log(`[BlockerManager] Maintaining temporary skip domains: ${Array.from(this.temporarySkipDomains).join(', ')}`);
+      console.log(`[BlockerFeature] Maintaining temporary skip domains: ${Array.from(this.temporarySkipDomains).join(', ')}`);
     }
 
     // 检查当前页面是否需要拦截
@@ -204,7 +399,7 @@
    */
   blockCurrentPage() {
     this.isCurrentPageBlocked = true;
-    console.log(`[BlockerManager] Blocking current page: ${window.location.href}`);
+    console.log(`[BlockerFeature] Blocking current page: ${window.location.href}`);
 
     // 🚨 关键修复：直接调用FocusPage.show()绕过TimerManager同步缺陷
     if (this.focusPage) {
@@ -219,7 +414,7 @@
    */
   unblockCurrentPage() {
     this.isCurrentPageBlocked = false;
-    console.log(`[BlockerManager] Unblocking current page: ${window.location.href}`);
+    console.log(`[BlockerFeature] Unblocking current page: ${window.location.href}`);
 
     if (this.focusPage && this.focusPage.isPageVisible()) {
       this.focusPage.hide();
@@ -255,7 +450,7 @@
     
     // 防御性检查：确保container有必要的方法
     if (typeof container.querySelectorAll !== 'function' || typeof container.querySelector !== 'function') {
-      console.warn("[BlockerManager] Container missing required DOM methods");
+      console.warn("[BlockerFeature] Container missing required DOM methods");
       return;
     }
     
@@ -318,7 +513,7 @@
             return false;
           }
         } catch (error) {
-          console.warn("[BlockerManager] Invalid URL for skip domain check:", url);
+          console.warn("[BlockerFeature] Invalid URL for skip domain check:", url);
         }
       }
 
@@ -337,7 +532,7 @@
       return shouldBlock;
 
     } catch (error) {
-      console.error("[BlockerManager] Error checking URL blocking:", error);
+      console.error("[BlockerFeature] Error checking URL blocking:", error);
       return false; // 出错时不拦截
     }
   }
@@ -386,24 +581,24 @@
    * 保存拦截器状态
    */
   saveBlockerState() {
-    if (!this.storageManager) return;
+    if (!this.storage) return;
 
     const state = {
       isActive: this.isActive,
       timestamp: Date.now()
     };
 
-    this.storageManager.setData("blockerState", state);
+    this.storage.setData("blockerState", state);
   }
 
   /**
    * 恢复拦截器状态
    */
   async restoreBlockerState() {
-    if (!this.storageManager) return;
+    if (!this.storage) return;
 
     try {
-      const state = this.storageManager.getData("blockerState");
+      const state = this.storage.getData("blockerState");
       if (state && typeof state.isActive === 'boolean') {
         this.isActive = state.isActive;
         
@@ -411,10 +606,10 @@
           await this.checkCurrentPageBlocking();
         }
         
-        console.log(`[BlockerManager] State restored: active=${this.isActive}`);
+        console.log(`[BlockerFeature] State restored: active=${this.isActive}`);
       }
     } catch (error) {
-      console.error("[BlockerManager] Failed to restore blocker state:", error);
+      console.error("[BlockerFeature] Failed to restore blocker state:", error);
     }
   }
 
@@ -482,7 +677,7 @@
         console.log('🔄 [RemoteStateChange] No action needed for state:', newState);
       }
     } catch (error) {
-      console.error("[BlockerManager] Error handling remote timer state change:", error);
+      console.error("[BlockerFeature] Error handling remote timer state change:", error);
     }
   }
 
@@ -491,8 +686,8 @@
    */
   async handleWindowFocus() {
     // 当标签页获得焦点时，检查拦截状态
-    if (this.timerManager) {
-      const timerState = this.timerManager.getTimerState();
+    if (this.timerService) {
+      const timerState = this.timerService.getTimerState();
       if (timerState.status === 'running' && !this.isActive) {
         this.activateBlocking(false); // 窗口焦点激活，保持临时跳过域名
       } else if (timerState.status !== 'running' && this.isActive) {
@@ -506,7 +701,7 @@
    */
   clearCache() {
     this.urlMatchCache.clear();
-    console.log("[BlockerManager] URL match cache cleared");
+    console.log("[BlockerFeature] URL match cache cleared");
   }
 
   /**
@@ -514,7 +709,7 @@
    */
   async addCurrentDomainToWhitelist() {
     if (!this.whitelistManager) {
-      console.warn("[BlockerManager] WhitelistManager not available");
+      console.warn("[BlockerFeature] WhitelistManager not available");
       return false;
     }
 
@@ -523,7 +718,7 @@
       const success = await this.whitelistManager.addDomain(currentDomain);
       
       if (success) {
-        console.log(`[BlockerManager] Added ${currentDomain} to whitelist`);
+        console.log(`[BlockerFeature] Added ${currentDomain} to whitelist`);
         
         // 清除缓存并重新检查当前页面
         this.clearCache();
@@ -531,11 +726,11 @@
         
         return true;
       } else {
-        console.warn(`[BlockerManager] Failed to add ${currentDomain} to whitelist`);
+        console.warn(`[BlockerFeature] Failed to add ${currentDomain} to whitelist`);
         return false;
       }
     } catch (error) {
-      console.error("[BlockerManager] Error adding domain to whitelist:", error);
+      console.error("[BlockerFeature] Error adding domain to whitelist:", error);
       return false;
     }
   }
@@ -546,7 +741,7 @@
    */
   handleSkipBlocking(url) {
     if (!this.isCurrentPageBlocked) {
-      console.warn("[BlockerManager] Current page is not blocked, skip ignored");
+      console.warn("[BlockerFeature] Current page is not blocked, skip ignored");
       return;
     }
 
@@ -558,11 +753,11 @@
       const urlObj = new URL(targetUrl);
       currentDomain = urlObj.hostname;
     } catch (error) {
-      console.warn("[BlockerManager] Invalid URL for skip blocking:", targetUrl);
+      console.warn("[BlockerFeature] Invalid URL for skip blocking:", targetUrl);
       currentDomain = window.location.hostname;
     }
     
-    console.log(`[BlockerManager] Skipping blocking for page: ${targetUrl}`);
+    console.log(`[BlockerFeature] Skipping blocking for page: ${targetUrl}`);
     
     // 临时将当前域名添加到跳过列表 (仅当前计时器会话有效)
     if (!this.temporarySkipDomains) {
@@ -577,7 +772,7 @@
     // 解除当前页面拦截
     this.unblockCurrentPage();
     
-    console.log(`[BlockerManager] Temporarily skipped blocking for domain: ${currentDomain}`);
+    console.log(`[BlockerFeature] Temporarily skipped blocking for domain: ${currentDomain}`);
   }
 
   /**
@@ -595,9 +790,57 @@
   }
 
   /**
-   * 获取单例实例
-   * @returns {BlockerManager} 拦截器管理器实例
+   * 销毁拦截功能
    */
+  destroy() {
+    this.unbindTimerManager();
+    this.deactivateBlocking();
+    this.clearCache();
+    
+    this.timerService = null;
+    this.whitelistManager = null;
+    this.focusPage = null;
+    this.storage = null;
+    
+    console.log("[BlockerFeature] Destroyed");
+  }
+}
+
+// === 兼容性层 - Linus原则: Never break userspace ===
+
+/**
+ * BlockerManager兼容类 - 包装BlockerFeature以模拟单例行为
+ */
+class BlockerManager {
+  constructor() {
+    if (BlockerManager.instance) {
+      return BlockerManager.instance;
+    }
+    
+    // 创建默认依赖（临时解决方案）
+    const defaultStorage = typeof Storage !== 'undefined' 
+      ? new Storage() 
+      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
+    
+    this._blockerFeature = new BlockerFeature(null, null, null, defaultStorage);
+    BlockerManager.instance = this;
+    return this;
+  }
+
+  // 代理所有方法到BlockerFeature
+  async initialize(timerManager, whitelistManager, focusPage, storageManager) {
+    return this._blockerFeature.initialize(timerManager, whitelistManager, focusPage, storageManager);
+  }
+  activateBlocking(byTimer = false) { return this._blockerFeature.activateBlocking(byTimer); }
+  deactivateBlocking() { return this._blockerFeature.deactivateBlocking(); }
+  blockCurrentPage() { return this._blockerFeature.blockCurrentPage(); }
+  unblockCurrentPage() { return this._blockerFeature.unblockCurrentPage(); }
+  shouldBlockUrl(url = null) { return this._blockerFeature.shouldBlockUrl(url); }
+  handleSkipBlocking(url) { return this._blockerFeature.handleSkipBlocking(url); }
+  getBlockingInfo() { return this._blockerFeature.getBlockingInfo(); }
+  clearCache() { return this._blockerFeature.clearCache(); }
+  destroy() { return this._blockerFeature.destroy(); }
+
   static getInstance() {
     if (!BlockerManager.instance) {
       BlockerManager.instance = new BlockerManager();
@@ -605,41 +848,242 @@
     return BlockerManager.instance;
   }
 
-  /**
-   * 销毁拦截器管理器
-   */
-  destroy() {
-    this.unbindTimerManager();
-    this.deactivateBlocking();
-    this.clearCache();
-    
-    this.timerManager = null;
-    this.whitelistManager = null;
-    this.focusPage = null;
-    this.storageManager = null;
-    
-    console.log("[BlockerManager] Destroyed");
+  static resetInstance() {
+    BlockerManager.instance = null;
   }
 }
 
-// 创建单例实例
-const blockerManager = new BlockerManager();
+// 创建兼容实例
+const blockerManager = BlockerManager.getInstance();
 
-// 全局对象暴露
+// 浏览器环境导出
 if (typeof window !== "undefined") {
-  window.BlockerManager = BlockerManager;
-  window.blockerManager = blockerManager;
+  window.BlockerFeature = BlockerFeature;     // 新API
+  window.BlockerManager = BlockerManager;     // 兼容API
+  window.blockerManager = blockerManager;     // 兼容实例
 }
 
-// 模块导出 (支持 CommonJS 和 ES6)
+// 模块导出
 
     /**
-     * StorageManager - 数据持久化管理器
+     * EventBus - Linus式事件总线
      */
+    class EventBus {
+  constructor() {
+    // 使用Map存储事件监听器 - O(1)查找
+    this.listeners = new Map();
+    
+    // 事件统计 - 用于调试和监控
+    this.stats = {
+      emitted: 0,
+      errors: 0,
+      listeners: 0
+    };
+    
+    console.log("[EventBus] Created");
+  }
+
+  /**
+   * 订阅事件
+   * @param {string} event - 事件名称
+   * @param {Function} listener - 监听器函数
+   * @returns {Function} 取消订阅的函数
+   */
+  on(event, listener) {
+    if (typeof listener !== 'function') {
+      throw new Error("[EventBus] Listener must be a function");
+    }
+
+    // 确保事件类型存在监听器集合
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+
+    const eventListeners = this.listeners.get(event);
+    eventListeners.add(listener);
+    this.stats.listeners++;
+
+    console.log(`[EventBus] Listener added for '${event}' (total: ${eventListeners.size})`);
+
+    // 返回取消订阅函数
+    return () => this.off(event, listener);
+  }
+
+  /**
+   * 取消订阅事件
+   * @param {string} event - 事件名称
+   * @param {Function} listener - 监听器函数
+   */
+  off(event, listener) {
+    const eventListeners = this.listeners.get(event);
+    if (!eventListeners) {
+      console.warn(`[EventBus] No listeners found for '${event}'`);
+      return;
+    }
+
+    if (eventListeners.delete(listener)) {
+      this.stats.listeners--;
+      console.log(`[EventBus] Listener removed for '${event}' (remaining: ${eventListeners.size})`);
+      
+      // 清理空的事件类型
+      if (eventListeners.size === 0) {
+        this.listeners.delete(event);
+      }
+    }
+  }
+
+  /**
+   * 一次性监听器
+   * @param {string} event - 事件名称
+   * @param {Function} listener - 监听器函数
+   * @returns {Function} 取消订阅的函数
+   */
+  once(event, listener) {
+    const onceListener = (...args) => {
+      // 执行后自动取消订阅
+      this.off(event, onceListener);
+      listener(...args);
+    };
+
+    return this.on(event, onceListener);
+  }
+
+  /**
+   * 发射事件
+   * @param {string} event - 事件名称
+   * @param {any} data - 事件数据
+   */
+  emit(event, data = null) {
+    const eventListeners = this.listeners.get(event);
+    if (!eventListeners || eventListeners.size === 0) {
+      console.log(`[EventBus] No listeners for '${event}'`);
+      return;
+    }
+
+    this.stats.emitted++;
+    let errorCount = 0;
+
+    // 异步执行所有监听器，避免阻塞
+    for (const listener of eventListeners) {
+      try {
+        // 使用 setTimeout 确保异步执行，避免监听器错误影响后续监听器
+        setTimeout(() => {
+          try {
+            listener(event, data);
+          } catch (error) {
+            this.stats.errors++;
+            console.error(`[EventBus] Listener error for '${event}':`, error);
+          }
+        }, 0);
+      } catch (error) {
+        errorCount++;
+        this.stats.errors++;
+        console.error(`[EventBus] Failed to schedule listener for '${event}':`, error);
+      }
+    }
+
+    console.log(`[EventBus] Emitted '${event}' to ${eventListeners.size} listeners${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+  }
+
+  /**
+   * 清除所有监听器
+   * @param {string} event - 可选：特定事件名称
+   */
+  clear(event = null) {
+    if (event) {
+      // 清除特定事件的监听器
+      const eventListeners = this.listeners.get(event);
+      if (eventListeners) {
+        const count = eventListeners.size;
+        this.listeners.delete(event);
+        this.stats.listeners -= count;
+        console.log(`[EventBus] Cleared ${count} listeners for '${event}'`);
+      }
+    } else {
+      // 清除所有监听器
+      const totalListeners = this.stats.listeners;
+      this.listeners.clear();
+      this.stats.listeners = 0;
+      console.log(`[EventBus] Cleared all ${totalListeners} listeners`);
+    }
+  }
+
+  /**
+   * 获取事件总线状态
+   * @returns {Object} 状态信息
+   */
+  getStats() {
+    return {
+      ...this.stats,
+      eventTypes: this.listeners.size,
+      events: Array.from(this.listeners.keys())
+    };
+  }
+
+  /**
+   * 检查是否有监听器
+   * @param {string} event - 事件名称
+   * @returns {boolean} 是否有监听器
+   */
+  hasListeners(event) {
+    const eventListeners = this.listeners.get(event);
+    return eventListeners && eventListeners.size > 0;
+  }
+
+  /**
+   * 获取事件监听器数量
+   * @param {string} event - 事件名称
+   * @returns {number} 监听器数量
+   */
+  getListenerCount(event) {
+    const eventListeners = this.listeners.get(event);
+    return eventListeners ? eventListeners.size : 0;
+  }
+
+  /**
+   * 销毁事件总线
+   */
+  destroy() {
+    this.clear();
+    console.log("[EventBus] Destroyed");
+  }
+}
+
+// 预定义事件类型 - 提供类型安全和文档
+EventBus.EVENTS = {
+  // 任务事件
+  TASK_CREATED: 'task:created',
+  TASK_UPDATED: 'task:updated',
+  TASK_DELETED: 'task:deleted',
+  TASK_COMPLETED: 'task:completed',
+  
+  // 计时器事件
+  TIMER_STARTED: 'timer:started',
+  TIMER_PAUSED: 'timer:paused',
+  TIMER_RESUMED: 'timer:resumed',
+  TIMER_STOPPED: 'timer:stopped',
+  TIMER_COMPLETED: 'timer:completed',
+  
+  // 拦截器事件
+  BLOCKER_ACTIVATED: 'blocker:activated',
+  BLOCKER_DEACTIVATED: 'blocker:deactivated',
+  
+  // 应用事件
+  APP_INITIALIZED: 'app:initialized',
+  APP_DESTROYED: 'app:destroyed'
+};
+
+// 浏览器环境导出
+if (typeof window !== "undefined") {
+  window.EventBus = EventBus;
+}
+
+// 模块导出
+
     /**
- * 存储管理器类
- */
-class StorageManager {
+     * Storage - Linus式数据持久化服务
+     */
+    class Storage {
   constructor() {
     // 存储键值常量
     this.STORAGE_KEYS = {
@@ -683,10 +1127,10 @@ class StorageManager {
       const serializedData = JSON.stringify(storageData);
       GM_setValue(this.STORAGE_KEYS.TASKS, serializedData);
 
-      console.log(`[StorageManager] Saved ${tasks.length} tasks to storage`);
+      console.log(`[Storage] Saved ${tasks.length} tasks to storage`);
       return true;
     } catch (error) {
-      console.error("[StorageManager] Failed to save tasks:", error);
+      console.error("[Storage] Failed to save tasks:", error);
       return false;
     }
   }
@@ -701,7 +1145,7 @@ class StorageManager {
 
       if (!serializedData) {
         console.log(
-          "[StorageManager] No tasks found in storage, returning empty array",
+          "[Storage] No tasks found in storage, returning empty array",
         );
         return [];
       }
@@ -712,7 +1156,7 @@ class StorageManager {
       // 检查数据版本和格式
       if (!this.validateStorageData(storageData)) {
         console.warn(
-          "[StorageManager] Invalid storage data format, returning empty array",
+          "[Storage] Invalid storage data format, returning empty array",
         );
         return [];
       }
@@ -722,10 +1166,10 @@ class StorageManager {
       // 验证任务数据结构
       this.validateTasksData(tasks);
 
-      console.log(`[StorageManager] Loaded ${tasks.length} tasks from storage`);
+      console.log(`[Storage] Loaded ${tasks.length} tasks from storage`);
       return tasks;
     } catch (error) {
-      console.error("[StorageManager] Failed to load tasks:", error);
+      console.error("[Storage] Failed to load tasks:", error);
       return [];
     }
   }
@@ -737,10 +1181,10 @@ class StorageManager {
   async clearTasks() {
     try {
       GM_setValue(this.STORAGE_KEYS.TASKS, null);
-      console.log("[StorageManager] Cleared all tasks from storage");
+      console.log("[Storage] Cleared all tasks from storage");
       return true;
     } catch (error) {
-      console.error("[StorageManager] Failed to clear tasks:", error);
+      console.error("[Storage] Failed to clear tasks:", error);
       return false;
     }
   }
@@ -770,10 +1214,10 @@ class StorageManager {
       const serializedData = JSON.stringify(storageData);
       GM_setValue(this.STORAGE_KEYS.SETTINGS, serializedData);
 
-      console.log("[StorageManager] Settings saved to storage");
+      console.log("[Storage] Settings saved to storage");
       return true;
     } catch (error) {
-      console.error("[StorageManager] Failed to save settings:", error);
+      console.error("[Storage] Failed to save settings:", error);
       return false;
     }
   }
@@ -788,7 +1232,7 @@ class StorageManager {
 
       if (!serializedData) {
         console.log(
-          "[StorageManager] No settings found in storage, returning defaults",
+          "[Storage] No settings found in storage, returning defaults",
         );
         return { ...this.DEFAULT_SETTINGS };
       }
@@ -799,7 +1243,7 @@ class StorageManager {
       // 检查数据版本和格式（使用设置专用的验证器）
       if (!this.validateSettingsStorageData(storageData)) {
         console.warn(
-          "[StorageManager] Invalid settings storage data, returning defaults",
+          "[Storage] Invalid settings storage data, returning defaults",
         );
         return { ...this.DEFAULT_SETTINGS };
       }
@@ -813,10 +1257,10 @@ class StorageManager {
       // 验证设置数据结构
       this.validateSettingsData(settings);
 
-      console.log("[StorageManager] Settings loaded from storage");
+      console.log("[Storage] Settings loaded from storage");
       return settings;
     } catch (error) {
-      console.error("[StorageManager] Failed to load settings:", error);
+      console.error("[Storage] Failed to load settings:", error);
       return { ...this.DEFAULT_SETTINGS };
     }
   }
@@ -829,11 +1273,11 @@ class StorageManager {
     try {
       const success = await this.saveSettings({ ...this.DEFAULT_SETTINGS });
       if (success) {
-        console.log("[StorageManager] Settings reset to defaults");
+        console.log("[Storage] Settings reset to defaults");
       }
       return success;
     } catch (error) {
-      console.error("[StorageManager] Failed to reset settings:", error);
+      console.error("[Storage] Failed to reset settings:", error);
       return false;
     }
   }
@@ -850,7 +1294,7 @@ class StorageManager {
       GM_setValue(key, serializedData);
       return true;
     } catch (error) {
-      console.error(`[StorageManager] Failed to set data for key ${key}:`, error);
+      console.error(`[Storage] Failed to set data for key ${key}:`, error);
       return false;
     }
   }
@@ -869,7 +1313,7 @@ class StorageManager {
       }
       return JSON.parse(serializedData);
     } catch (error) {
-      console.error(`[StorageManager] Failed to get data for key ${key}:`, error);
+      console.error(`[Storage] Failed to get data for key ${key}:`, error);
       return defaultValue;
     }
   }
@@ -884,7 +1328,7 @@ class StorageManager {
       GM_setValue(key, undefined);
       return true;
     } catch (error) {
-      console.error(`[StorageManager] Failed to remove data for key ${key}:`, error);
+      console.error(`[Storage] Failed to remove data for key ${key}:`, error);
       return false;
     }
   }
@@ -906,7 +1350,7 @@ class StorageManager {
         lastUpdated: this.getLastUpdateTime(),
       };
     } catch (error) {
-      console.error("[StorageManager] Failed to get storage stats:", error);
+      console.error("[Storage] Failed to get storage stats:", error);
       return null;
     }
   }
@@ -1105,7 +1549,7 @@ class StorageManager {
 
       return JSON.stringify(exportData, null, 2);
     } catch (error) {
-      console.error("[StorageManager] Failed to export tasks:", error);
+      console.error("[Storage] Failed to export tasks:", error);
       throw error;
     }
   }
@@ -1126,181 +1570,131 @@ class StorageManager {
       this.validateTasksData(importData.tasks);
       return await this.saveTasks(importData.tasks);
     } catch (error) {
-      console.error("[StorageManager] Failed to import tasks:", error);
+      console.error("[Storage] Failed to import tasks:", error);
       return false;
     }
   }
 }
 
 // 创建单例实例
-const storageManager = new StorageManager();
+// 兼容性导出 - Linus原则: Never break userspace
+const storage = new Storage();
+const storageManager = storage; // 兼容旧名称
 
 // 如果在浏览器环境中，将其添加到全局对象
 if (typeof window !== "undefined") {
-  window.StorageManager = StorageManager;
+  window.Storage = Storage;
+  window.StorageManager = Storage; // 兼容性
   window.storageManager = storageManager;
 }
 
     /**
-     * TaskManager - 任务管理器
+     * TaskService - Linus 式依赖注入任务服务
      */
-    /**
- * 任务管理器类 (单例模式)
- */
-class TaskManager {
-  constructor() {
-    if (TaskManager.instance) {
-      return TaskManager.instance;
-    }
-
-    this.tasks = [];
-    this.storageManager = null;
+    class TaskService {
+  constructor(storage) {
+    // 依赖注入 - 显式优于隐式
+    this.storage = storage;
+    
+    // 核心数据结构 - Linus方式
+    this.tasks = new Map();
+    this.observers = new Set(); // 观察者用Set，避免重复
     this.isInitialized = false;
-    this.observers = []; // 观察者模式，用于UI更新
-
-    TaskManager.instance = this;
-    return this;
   }
 
-  /**
-   * 初始化任务管理器
-   * @param {StorageManager} storageManager - 存储管理器实例
-   */
-  async initialize(storageManager) {
-    if (this.isInitialized) {
-      return;
+  // === 兼容性API - 保持现有接口不变 ===
+
+  async initialize(storageManager = null) {
+    if (this.isInitialized) return;
+
+    // 兼容旧API：如果传入storageManager，使用它；否则使用注入的storage
+    if (storageManager) {
+      this.storage = storageManager;
     }
-
-    this.storageManager = storageManager;
-
+    
     try {
-      // 从存储加载任务
-      this.tasks = await this.storageManager.loadTasks();
-      this.sortTasks();
-
+      const data = await this.storage.loadTasks();
+      // 内部用Map，但兼容数组输入
+      this.tasks = new Map(data.map(t => [t.id, t]));
+      
       this.isInitialized = true;
-      console.log(`[TaskManager] Initialized with ${this.tasks.length} tasks`);
-
-      // 通知观察者
+      console.log(`[TaskService] Initialized with ${this.tasks.size} tasks`);
       this.notifyObservers("initialized");
     } catch (error) {
-      console.error("[TaskManager] Failed to initialize:", error);
-      this.tasks = [];
+      console.error("[TaskService] Failed to initialize:", error);
+      this.tasks = new Map();
     }
   }
 
-  /**
-   * 创建新任务
-   * @param {string} title - 任务标题
-   * @returns {Promise<Task>} 创建的任务对象
-   */
   async createTask(title) {
-    if (!title || typeof title !== "string" || title.trim() === "") {
+    if (!title?.trim()) {
       throw new Error("Task title is required and must be a non-empty string");
     }
 
-    // HTML 转义以防止 XSS
-    const sanitizedTitle = this.escapeHtml(title.trim());
-
     const task = {
-      id: this.generateUUID(),
-      title: sanitizedTitle,
+      id: Date.now().toString(),
+      title: title.trim(),
       isCompleted: false,
       createdAt: Date.now(),
       completedAt: null,
       pomodoroCount: 0,
     };
-
-    this.tasks.push(task);
-    this.sortTasks();
-
-    // 保存到存储
+    
+    this.tasks.set(task.id, task);
     await this.saveTasks();
-
+    
     console.log(`[TaskManager] Created task: ${task.title}`);
-
-    // 通知观察者
     this.notifyObservers("taskCreated", { task });
-
     return task;
   }
 
-  /**
-   * 获取所有任务
-   * @returns {Array<Task>} 任务列表
-   */
   getAllTasks() {
-    return [...this.tasks]; // 返回副本以防外部修改
+    // 返回排序后的数组，保持兼容
+    return Array.from(this.tasks.values()).sort((a, b) => {
+      if (a.isCompleted !== b.isCompleted) {
+        return a.isCompleted ? 1 : -1;
+      }
+      if (a.isCompleted && b.isCompleted) {
+        return (b.completedAt || 0) - (a.completedAt || 0);
+      }
+      return a.createdAt - b.createdAt;
+    });
   }
 
-  /**
-   * 根据ID获取任务
-   * @param {string} taskId - 任务ID
-   * @returns {Task|null} 任务对象或null
-   */
   getTaskById(taskId) {
-    return this.tasks.find((task) => task.id === taskId) || null;
+    return this.tasks.get(taskId) || null;
   }
 
-  /**
-   * 获取待完成任务
-   * @returns {Array<Task>} 待完成任务列表
-   */
   getPendingTasks() {
-    return this.tasks.filter((task) => !task.isCompleted);
+    return Array.from(this.tasks.values()).filter(task => !task.isCompleted);
   }
 
-  /**
-   * 获取已完成任务
-   * @returns {Array<Task>} 已完成任务列表
-   */
   getCompletedTasks() {
-    return this.tasks.filter((task) => task.isCompleted);
+    return Array.from(this.tasks.values()).filter(task => task.isCompleted);
   }
 
-  /**
-   * 更新任务标题
-   * @param {string} taskId - 任务ID
-   * @param {string} newTitle - 新标题
-   * @returns {Promise<boolean>} 更新是否成功
-   */
   async updateTaskTitle(taskId, newTitle) {
-    const task = this.getTaskById(taskId);
+    const task = this.tasks.get(taskId);
     if (!task) {
       console.warn(`[TaskManager] Task not found: ${taskId}`);
       return false;
     }
 
-    if (!newTitle || typeof newTitle !== "string" || newTitle.trim() === "") {
+    if (!newTitle?.trim()) {
       throw new Error("Task title is required and must be a non-empty string");
     }
 
     const oldTitle = task.title;
-    task.title = this.escapeHtml(newTitle.trim());
-
+    task.title = newTitle.trim();
     await this.saveTasks();
 
-    console.log(
-      `[TaskManager] Updated task title: "${oldTitle}" -> "${task.title}"`,
-    );
-
-    // 通知观察者
-    this.notifyObservers("taskUpdated", {
-      task,
-      field: "title",
-      oldValue: oldTitle,
-    });
-
+    console.log(`[TaskManager] Updated task title: "${oldTitle}" -> "${task.title}"`);
+    this.notifyObservers("taskUpdated", { task, field: "title", oldValue: oldTitle });
     return true;
   }
 
-  /**
-   * 切换任务完成状态
-   * @param {string} taskId - 任务ID
-   * @returns {Promise<boolean>} 切换是否成功
-   */
   async toggleTaskCompletion(taskId) {
-    const task = this.getTaskById(taskId);
+    const task = this.tasks.get(taskId);
     if (!task) {
       console.warn(`[TaskManager] Task not found: ${taskId}`);
       return false;
@@ -1308,56 +1702,33 @@ class TaskManager {
 
     const wasCompleted = task.isCompleted;
     task.isCompleted = !task.isCompleted;
+    task.completedAt = task.isCompleted ? Date.now() : null;
 
-    if (task.isCompleted && !task.completedAt) {
-      task.completedAt = Date.now();
-    } else if (!task.isCompleted) {
-      task.completedAt = null;
-    }
-
-    this.sortTasks();
     await this.saveTasks();
 
     const action = task.isCompleted ? "completed" : "uncompleted";
     console.log(`[TaskManager] Task ${action}: ${task.title}`);
-
-    // 通知观察者
     this.notifyObservers("taskToggled", { task, wasCompleted });
-
     return true;
   }
 
-  /**
-   * 删除任务
-   * @param {string} taskId - 任务ID
-   * @returns {Promise<boolean>} 删除是否成功
-   */
   async deleteTask(taskId) {
-    const taskIndex = this.tasks.findIndex((task) => task.id === taskId);
-    if (taskIndex === -1) {
+    const task = this.tasks.get(taskId);
+    if (!task) {
       console.warn(`[TaskManager] Task not found: ${taskId}`);
       return false;
     }
 
-    const deletedTask = this.tasks.splice(taskIndex, 1)[0];
+    this.tasks.delete(taskId);
     await this.saveTasks();
 
-    console.log(`[TaskManager] Deleted task: ${deletedTask.title}`);
-
-    // 通知观察者
-    this.notifyObservers("taskDeleted", { task: deletedTask });
-
+    console.log(`[TaskManager] Deleted task: ${task.title}`);
+    this.notifyObservers("taskDeleted", { task });
     return true;
   }
 
-  /**
-   * 增加任务的番茄数
-   * @param {string} taskId - 任务ID
-   * @param {number} count - 增加的番茄数，默认为1
-   * @returns {Promise<boolean>} 更新是否成功
-   */
   async incrementPomodoroCount(taskId, count = 1) {
-    const task = this.getTaskById(taskId);
+    const task = this.tasks.get(taskId);
     if (!task) {
       console.warn(`[TaskManager] Task not found: ${taskId}`);
       return false;
@@ -1365,49 +1736,38 @@ class TaskManager {
 
     const oldCount = task.pomodoroCount;
     task.pomodoroCount += count;
-
     await this.saveTasks();
 
     console.log(
       `[TaskManager] Updated pomodoro count for "${task.title}": ${oldCount} -> ${task.pomodoroCount}`,
     );
-
-    // 通知观察者
     this.notifyObservers("pomodoroUpdated", { task, oldCount });
-
     return true;
   }
 
-  /**
-   * 清除所有已完成的任务
-   * @returns {Promise<number>} 清除的任务数量
-   */
   async clearCompletedTasks() {
-    const completedTasks = this.getCompletedTasks();
-    const clearedCount = completedTasks.length;
+    const completed = [];
+    for (const [id, task] of this.tasks) {
+      if (task.isCompleted) {
+        this.tasks.delete(id);
+        completed.push(task);
+      }
+    }
 
-    this.tasks = this.tasks.filter((task) => !task.isCompleted);
-    await this.saveTasks();
-
-    console.log(`[TaskManager] Cleared ${clearedCount} completed tasks`);
-
-    // 通知观察者
-    this.notifyObservers("completedTasksCleared", { count: clearedCount });
-
-    return clearedCount;
+    if (completed.length > 0) {
+      await this.saveTasks();
+      console.log(`[TaskManager] Cleared ${completed.length} completed tasks`);
+      this.notifyObservers("completedTasksCleared", { count: completed.length });
+    }
+    return completed.length;
   }
 
-  /**
-   * 获取任务统计信息
-   * @returns {Object} 统计信息
-   */
   getStatistics() {
-    const total = this.tasks.length;
+    const total = this.tasks.size;
     const completed = this.getCompletedTasks().length;
-    const pending = this.getPendingTasks().length;
-    const totalPomodoros = this.tasks.reduce(
-      (sum, task) => sum + task.pomodoroCount,
-      0,
+    const pending = total - completed;
+    const totalPomodoros = Array.from(this.tasks.values()).reduce(
+      (sum, task) => sum + task.pomodoroCount, 0
     );
 
     return {
@@ -1420,30 +1780,30 @@ class TaskManager {
     };
   }
 
-  /**
-   * 排序任务列表
-   * 规则：未完成的任务在前面，已完成的任务在后面，按完成时间倒序排列
-   */
-  sortTasks() {
-    this.tasks.sort((a, b) => {
-      // 首先按完成状态排序
-      if (a.isCompleted !== b.isCompleted) {
-        return a.isCompleted ? 1 : -1;
-      }
+  // === 观察者模式API - 完全兼容 ===
 
-      // 如果都是已完成任务，按完成时间倒序排列
-      if (a.isCompleted && b.isCompleted) {
-        return (b.completedAt || 0) - (a.completedAt || 0);
-      }
-
-      // 如果都是待完成任务，按创建时间正序排列
-      return a.createdAt - b.createdAt;
-    });
+  addObserver(observer) {
+    if (typeof observer === "function") {
+      this.observers.add(observer);
+    }
   }
 
-  /**
-   * 保存任务到存储
-   */
+  removeObserver(observer) {
+    this.observers.delete(observer);
+  }
+
+  notifyObservers(event, data = {}) {
+    for (const observer of this.observers) {
+      try {
+        observer(event, data, this);
+      } catch (error) {
+        console.error("[TaskManager] Observer error:", error);
+      }
+    }
+  }
+
+  // === 内部实现 - Linus式简洁 ===
+
   async saveTasks() {
     if (!this.storageManager) {
       console.error("[TaskManager] StorageManager not initialized");
@@ -1451,72 +1811,78 @@ class TaskManager {
     }
 
     try {
-      return await this.storageManager.saveTasks(this.tasks);
+      // 转换Map为Array只在保存时
+      const data = Array.from(this.tasks.values());
+      return await this.storageManager.saveTasks(data);
     } catch (error) {
       console.error("[TaskManager] Failed to save tasks:", error);
       return false;
     }
   }
 
-  /**
-   * 生成UUID
-   * @returns {string} UUID字符串
-   */
-  generateUUID() {
-    return "task-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9);
+  // === 内部实现辅助方法 ===
+
+  async saveTasks() {
+    // 兼容性方法，内部调用save()
+    return await this.save();
   }
 
-  /**
-   * HTML转义函数，防止XSS
-   * @param {string} text - 要转义的文本
-   * @returns {string} 转义后的文本
-   */
-  escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-  }
+  async save() {
+    if (!this.storage) {
+      console.error("[TaskService] Storage not initialized");
+      return false;
+    }
 
-  /**
-   * 添加观察者
-   * @param {Function} observer - 观察者函数
-   */
-  addObserver(observer) {
-    if (typeof observer === "function") {
-      this.observers.push(observer);
+    try {
+      // 转换Map为Array只在保存时
+      const data = Array.from(this.tasks.values());
+      return await this.storage.saveTasks(data);
+    } catch (error) {
+      console.error("[TaskService] Failed to save tasks:", error);
+      return false;
     }
   }
+}
 
-  /**
-   * 移除观察者
-   * @param {Function} observer - 观察者函数
-   */
-  removeObserver(observer) {
-    const index = this.observers.indexOf(observer);
-    if (index > -1) {
-      this.observers.splice(index, 1);
+// === 兼容性层 - Linus原则: Never break userspace ===
+
+/**
+ * TaskManager兼容类 - 包装TaskService以模拟单例行为
+ */
+class TaskManager {
+  constructor() {
+    if (TaskManager.instance) {
+      return TaskManager.instance;
     }
+    
+    // 创建默认storage（临时解决方案）
+    const defaultStorage = typeof Storage !== 'undefined' 
+      ? new Storage() 
+      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
+    
+    this._taskService = new TaskService(defaultStorage);
+    TaskManager.instance = this;
+    return this;
   }
 
-  /**
-   * 通知所有观察者
-   * @param {string} event - 事件类型
-   * @param {Object} data - 事件数据
-   */
-  notifyObservers(event, data = {}) {
-    this.observers.forEach((observer) => {
-      try {
-        observer(event, data, this);
-      } catch (error) {
-        console.error("[TaskManager] Observer error:", error);
-      }
-    });
-  }
+  // 代理所有方法到TaskService
+  async initialize(storageManager) { return this._taskService.initialize(storageManager); }
+  async createTask(title) { return this._taskService.createTask(title); }
+  getAllTasks() { return this._taskService.getAllTasks(); }
+  getTaskById(taskId) { return this._taskService.getTaskById(taskId); }
+  getPendingTasks() { return this._taskService.getPendingTasks(); }
+  getCompletedTasks() { return this._taskService.getCompletedTasks(); }
+  async updateTaskTitle(taskId, newTitle) { return this._taskService.updateTaskTitle(taskId, newTitle); }
+  async toggleTaskCompletion(taskId) { return this._taskService.toggleTaskCompletion(taskId); }
+  async deleteTask(taskId) { return this._taskService.deleteTask(taskId); }
+  async incrementPomodoroCount(taskId, count) { return this._taskService.incrementPomodoroCount(taskId, count); }
+  async clearCompletedTasks() { return this._taskService.clearCompletedTasks(); }
+  getStatistics() { return this._taskService.getStatistics(); }
+  addObserver(observer) { return this._taskService.addObserver(observer); }
+  removeObserver(observer) { return this._taskService.removeObserver(observer); }
+  notifyObservers(event, data) { return this._taskService.notifyObservers(event, data); }
+  async saveTasks() { return this._taskService.saveTasks(); }
 
-  /**
-   * 获取任务管理器实例 (单例)
-   * @returns {TaskManager} 任务管理器实例
-   */
   static getInstance() {
     if (!TaskManager.instance) {
       TaskManager.instance = new TaskManager();
@@ -1524,33 +1890,30 @@ class TaskManager {
     return TaskManager.instance;
   }
 
-  /**
-   * 重置实例 (主要用于测试)
-   */
   static resetInstance() {
     TaskManager.instance = null;
   }
 }
 
-// 创建单例实例
+// 创建兼容实例
 const taskManager = TaskManager.getInstance();
 
-// 如果在浏览器环境中，将其添加到全局对象
+// 浏览器环境导出
 if (typeof window !== "undefined") {
-  window.TaskManager = TaskManager;
-  window.taskManager = taskManager;
+  window.TaskService = TaskService;     // 新API
+  window.TaskManager = TaskManager;     // 兼容API
+  window.taskManager = taskManager;     // 兼容实例
 }
 
+// 模块导出
+
     /**
-     * TimerManager - 计时器管理器
+     * TimerService - Linus式依赖注入计时器服务
      */
-    class TimerManager {
-  constructor() {
-    // 单例模式
-    if (TimerManager.instance) {
-      return TimerManager.instance;
-    }
-    TimerManager.instance = this;
+    class TimerService {
+  constructor(storage) {
+    // 依赖注入 - 显式优于隐式
+    this.storage = storage;
 
     // 计时器状态
     this.status = "idle"; // idle, running, paused, completed
@@ -1561,11 +1924,8 @@ if (typeof window !== "undefined") {
     this.totalSeconds = 1500; // 默认25分钟
     this.intervalId = null;
 
-    // 观察者列表
-    this.observers = [];
-
-    // 存储管理器引用
-    this.storageManager = null;
+    // 观察者列表 - 用Set避免重复
+    this.observers = new Set();
 
     // 通知权限状态
     this.notificationPermission = null;
@@ -1579,19 +1939,22 @@ if (typeof window !== "undefined") {
 
     this.initialized = false;
 
-    console.log("[TimerManager] Created");
+    console.log("[TimerService] Created");
   }
 
   /**
-   * 初始化计时器管理器
-   * @param {StorageManager} storageManager - 存储管理器实例
+   * 初始化计时器服务
+   * @param {Storage} storageManager - 存储管理器实例（兼容参数）
    */
-  async initialize(storageManager) {
+  async initialize(storageManager = null) {
     if (this.initialized) {
       return;
     }
 
-    this.storageManager = storageManager;
+    // 兼容旧API：如果传入storageManager，使用它；否则使用注入的storage
+    if (storageManager) {
+      this.storage = storageManager;
+    }
     
     // 初始化通知权限状态（不请求权限）
     this.initializeNotificationStatus();
@@ -1600,7 +1963,7 @@ if (typeof window !== "undefined") {
     await this.restoreTimerState();
 
     this.initialized = true;
-    console.log("[TimerManager] Initialized successfully");
+    console.log("[TimerService] Initialized successfully");
   }
 
   /**
@@ -1614,10 +1977,10 @@ if (typeof window !== "undefined") {
     
     if (!NotificationAPI) {
       this.notificationPermission = "unsupported";
-      console.warn("[TimerManager] Browser does not support notifications");
+      console.warn("[TimerService] Browser does not support notifications");
     } else {
       this.notificationPermission = NotificationAPI.permission;
-      console.log(`[TimerManager] Initial notification permission: ${this.notificationPermission}`);
+      console.log(`[TimerService] Initial notification permission: ${this.notificationPermission}`);
     }
   }
 
@@ -1632,7 +1995,7 @@ if (typeof window !== "undefined") {
     
     if (!NotificationAPI) {
       this.notificationPermission = "unsupported";
-      console.warn("[TimerManager] Browser does not support notifications");
+      console.warn("[TimerService] Browser does not support notifications");
       return;
     }
 
@@ -1642,16 +2005,16 @@ if (typeof window !== "undefined") {
     // 仅在权限为 default 时请求权限
     if (this.notificationPermission === "default") {
       try {
-        console.log("[TimerManager] Requesting notification permission for focus session");
+        console.log("[TimerService] Requesting notification permission for focus session");
         const permission = await NotificationAPI.requestPermission();
         this.notificationPermission = permission;
-        console.log(`[TimerManager] Notification permission result: ${permission}`);
+        console.log(`[TimerService] Notification permission result: ${permission}`);
       } catch (error) {
-        console.error("[TimerManager] Failed to request notification permission:", error);
+        console.error("[TimerService] Failed to request notification permission:", error);
         this.notificationPermission = "denied";
       }
     } else {
-      console.log(`[TimerManager] Using existing notification permission: ${this.notificationPermission}`);
+      console.log(`[TimerService] Using existing notification permission: ${this.notificationPermission}`);
     }
   }
 
@@ -1663,7 +2026,7 @@ if (typeof window !== "undefined") {
    */
   async startTimer(taskId, taskTitle, duration = 1500) {
     if (this.status === "running") {
-      console.warn("[TimerManager] Timer is already running");
+      console.warn("[TimerService] Timer is already running");
       return false;
     }
 
@@ -1686,7 +2049,7 @@ if (typeof window !== "undefined") {
       remainingSeconds: this.remainingSeconds,
     });
 
-    console.log(`[TimerManager] Timer started for task: ${taskTitle} (${duration}s)`);
+    console.log(`[TimerService] Timer started for task: ${taskTitle} (${duration}s)`);
     return true;
   }
 
@@ -1695,7 +2058,7 @@ if (typeof window !== "undefined") {
    */
   pauseTimer() {
     if (this.status !== "running") {
-      console.warn("[TimerManager] Timer is not running");
+      console.warn("[TimerService] Timer is not running");
       return false;
     }
 
@@ -1706,7 +2069,7 @@ if (typeof window !== "undefined") {
       remainingSeconds: this.remainingSeconds,
     });
 
-    console.log("[TimerManager] Timer paused");
+    console.log("[TimerService] Timer paused");
     return true;
   }
 
@@ -1715,7 +2078,7 @@ if (typeof window !== "undefined") {
    */
   resumeTimer() {
     if (this.status !== "paused") {
-      console.warn("[TimerManager] Timer is not paused");
+      console.warn("[TimerService] Timer is not paused");
       return false;
     }
 
@@ -1727,7 +2090,7 @@ if (typeof window !== "undefined") {
       remainingSeconds: this.remainingSeconds,
     });
 
-    console.log("[TimerManager] Timer resumed");
+    console.log("[TimerService] Timer resumed");
     return true;
   }
 
@@ -1736,7 +2099,7 @@ if (typeof window !== "undefined") {
    */
   stopTimer(donotNotify) {
     if (this.status === "idle") {
-      console.warn("[TimerManager] Timer is already idle");
+      console.warn("[TimerService] Timer is already idle");
       return false;
     }
 
@@ -1749,7 +2112,7 @@ if (typeof window !== "undefined") {
       this.notifyObservers("timerStopped", {});
     }
 
-    console.log("[TimerManager] Timer stopped, state saved as idle");
+    console.log("[TimerService] Timer stopped, state saved as idle");
     return true;
   }
 
@@ -1760,13 +2123,13 @@ if (typeof window !== "undefined") {
    */
   modifyTimer(newDuration) {
     if (this.status !== "running" && this.status !== "paused") {
-      console.warn("[TimerManager] Cannot modify timer when not running or paused");
+      console.warn("[TimerService] Cannot modify timer when not running or paused");
       return false;
     }
 
     // 验证新时长
     if (!Number.isInteger(newDuration) || newDuration <= 0 || newDuration > 7200) {
-      console.error("[TimerManager] Invalid duration. Must be between 1 and 7200 seconds");
+      console.error("[TimerService] Invalid duration. Must be between 1 and 7200 seconds");
       return false;
     }
 
@@ -1801,7 +2164,7 @@ if (typeof window !== "undefined") {
       remainingSeconds: this.remainingSeconds,
     });
 
-    console.log(`[TimerManager] Timer duration modified from ${oldDuration}s to ${newDuration}s`);
+    console.log(`[TimerService] Timer duration modified from ${oldDuration}s to ${newDuration}s`);
     return true;
   }
 
@@ -1874,7 +2237,7 @@ if (typeof window !== "undefined") {
       this.saveTimerState();
     }, 1000); // 给UI足够时间处理完成事件
 
-    console.log(`[TimerManager] Timer completed for task: ${this.taskTitle}`);
+    console.log(`[TimerService] Timer completed for task: ${this.taskTitle}`);
   }
 
   /**
@@ -1916,11 +2279,11 @@ if (typeof window !== "undefined") {
         };
 
       } catch (error) {
-        console.error("[TimerManager] Failed to send notification:", error);
+        console.error("[TimerService] Failed to send notification:", error);
         this.showFallbackNotification(title, message);
       }
     } else {
-      console.warn(`[TimerManager] Notification permission: ${this.notificationPermission}`);
+      console.warn(`[TimerService] Notification permission: ${this.notificationPermission}`);
       this.showFallbackNotification(title, message);
     }
   }
@@ -1995,7 +2358,7 @@ if (typeof window !== "undefined") {
    * 保存计时器状态
    */
   saveTimerState() {
-    if (!this.storageManager) return;
+    if (!this.storage) return;
 
     const state = {
       status: this.status,
@@ -2007,17 +2370,17 @@ if (typeof window !== "undefined") {
       timestamp: Date.now(),
     };
 
-    this.storageManager.setData("timerState", state);
+    this.storage.setData("timerState", state);
   }
 
   /**
    * 恢复计时器状态
    */
   async restoreTimerState() {
-    if (!this.storageManager) return;
+    if (!this.storage) return;
 
     try {
-      const state = this.storageManager.getData("timerState");
+      const state = this.storage.getData("timerState");
       if (!state || state.status === "idle") {
         return;
       }
@@ -2039,11 +2402,11 @@ if (typeof window !== "undefined") {
           this.status = "running";
 
           this.startCountdown();
-          console.log("[TimerManager] Timer state restored and resumed");
+          console.log("[TimerService] Timer state restored and resumed");
         } else {
           // 计时器应该已经完成了
           this.completeTimer();
-          console.log("[TimerManager] Timer completed while away");
+          console.log("[TimerService] Timer completed while away");
         }
       } else if (state.status === "paused") {
         this.taskId = state.taskId;
@@ -2051,11 +2414,11 @@ if (typeof window !== "undefined") {
         this.remainingSeconds = state.remainingSeconds;
         this.totalSeconds = state.totalSeconds;
         this.status = "paused";
-        console.log("[TimerManager] Timer state restored (paused)");
+        console.log("[TimerService] Timer state restored (paused)");
       }
 
     } catch (error) {
-      console.error("[TimerManager] Failed to restore timer state:", error);
+      console.error("[TimerService] Failed to restore timer state:", error);
     }
   }
 
@@ -2063,8 +2426,8 @@ if (typeof window !== "undefined") {
    * 清除保存的计时器状态
    */
   clearTimerState() {
-    if (!this.storageManager) return;
-    this.storageManager.removeData("timerState");
+    if (!this.storage) return;
+    this.storage.removeData("timerState");
   }
 
   /**
@@ -2073,7 +2436,7 @@ if (typeof window !== "undefined") {
    */
   addObserver(observer) {
     if (typeof observer === "function" && !this.observers.includes(observer)) {
-      this.observers.push(observer);
+      this.observers.add(observer);
     }
   }
 
@@ -2082,10 +2445,8 @@ if (typeof window !== "undefined") {
    * @param {Function} observer - 观察者回调函数
    */
   removeObserver(observer) {
-    const index = this.observers.indexOf(observer);
-    if (index > -1) {
-      this.observers.splice(index, 1);
-    }
+    this.observers.delete(observer);
+    // Observer removed using Set.delete() above
   }
 
   /**
@@ -2094,13 +2455,13 @@ if (typeof window !== "undefined") {
    * @param {Object} data - 事件数据
    */
   notifyObservers(event, data) {
-    this.observers.forEach((observer) => {
+    for (const observer of this.observers) {
       try {
         observer(event, data);
       } catch (error) {
-        console.error("[TimerManager] Observer error:", error);
+        console.error("[TimerService] Observer error:", error);
       }
-    });
+    }
   }
 
   /**
@@ -2155,9 +2516,51 @@ if (typeof window !== "undefined") {
   }
 
   /**
-   * 获取单例实例
-   * @returns {TimerManager} 计时器管理器实例
+   * 销毁计时器服务
    */
+  destroy() {
+    this.clearCountdown();
+    this.clearTimerState();
+    this.observers = new Set();
+    console.log("[TimerService] Destroyed");
+  }
+}
+
+// === 兼容性层 - Linus原则: Never break userspace ===
+
+/**
+ * TimerManager兼容类 - 包装TimerService以模拟单例行为
+ */
+class TimerManager {
+  constructor() {
+    if (TimerManager.instance) {
+      return TimerManager.instance;
+    }
+    
+    // 创建默认storage（临时解决方案）
+    const defaultStorage = typeof Storage !== 'undefined' 
+      ? new Storage() 
+      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
+    
+    this._timerService = new TimerService(defaultStorage);
+    TimerManager.instance = this;
+    return this;
+  }
+
+  // 代理所有方法到TimerService
+  async initialize(storageManager) { return this._timerService.initialize(storageManager); }
+  async startTimer(taskId, taskTitle, duration) { return this._timerService.startTimer(taskId, taskTitle, duration); }
+  pauseTimer() { return this._timerService.pauseTimer(); }
+  resumeTimer() { return this._timerService.resumeTimer(); }
+  stopTimer() { return this._timerService.stopTimer(); }
+  modifyTimer(newDuration) { return this._timerService.modifyTimer(newDuration); }
+  getTimerState() { return this._timerService.getTimerState(); }
+  getTaskInfo() { return this._timerService.getTaskInfo(); }
+  addObserver(observer) { return this._timerService.addObserver(observer); }
+  removeObserver(observer) { return this._timerService.removeObserver(observer); }
+  notifyObservers(event, data) { return this._timerService.notifyObservers(event, data); }
+  destroy() { return this._timerService.destroy(); }
+
   static getInstance() {
     if (!TimerManager.instance) {
       TimerManager.instance = new TimerManager();
@@ -2165,27 +2568,22 @@ if (typeof window !== "undefined") {
     return TimerManager.instance;
   }
 
-  /**
-   * 销毁计时器管理器
-   */
-  destroy() {
-    this.clearCountdown();
-    this.clearTimerState();
-    this.observers = [];
-    console.log("[TimerManager] Destroyed");
+  static resetInstance() {
+    TimerManager.instance = null;
   }
 }
 
-// 创建单例实例
-const timerManager = new TimerManager();
+// 创建兼容实例
+const timerManager = TimerManager.getInstance();
 
-// 全局对象暴露
+// 浏览器环境导出
 if (typeof window !== "undefined") {
-  window.TimerManager = TimerManager;
-  window.timerManager = timerManager;
+  window.TimerService = TimerService;       // 新API
+  window.TimerManager = TimerManager;       // 兼容API
+  window.timerManager = timerManager;       // 兼容实例
 }
 
-// 模块导出 (支持 CommonJS 和 ES6)
+// 模块导出
 
     /**
      * WhitelistManager - 网站白名单管理器
@@ -5137,34 +5535,6 @@ if (typeof window !== "undefined") {
  * 3. 启动应用程序
  */
 
-/**
- * AppCore - 模块生命周期管理器
- * 职责：只管理模块注册和初始化，不管其他任何事
- */
-class AppCore {
-    constructor() {
-        this.modules = new Map();
-        this.initialized = false;
-    }
-    
-    register(name, module) {
-        this.modules.set(name, module);
-        return this;
-    }
-    
-    get(name) {
-        return this.modules.get(name);
-    }
-    
-    async initialize() {
-        for (const [name, module] of this.modules) {
-            if (typeof module.initialize === 'function') {
-                await module.initialize();
-            }
-        }
-        this.initialized = true;
-    }
-}
 
 /**
  * PageInterceptor - 页面拦截逻辑
@@ -5265,20 +5635,23 @@ class UIController {
 }
 
 /**
- * TomatoMonkeyApp - 轻量级应用程序控制器
- * 职责：协调各个组件，保持向后兼容
+ * TomatoMonkeyApp - Linus式应用程序控制器
+ * 职责：协调各个组件，使用依赖注入容器
  */
 class TomatoMonkeyApp {
     constructor() {
-        this.core = new AppCore();
+        // 使用Application依赖注入容器
+        this.app = new Application();
         this.initialized = false;
+        
+        console.log('[TomatoMonkey] Created app with DI container');
     }
 
     async init() {
         if (this.initialized) return;
 
         try {
-            console.log('[TomatoMonkey] Initializing application...');
+            console.log('[TomatoMonkey] Initializing application with DI container...');
             
             // 等待DOM，一行搞定
             await this.waitForDOM();
@@ -5286,11 +5659,8 @@ class TomatoMonkeyApp {
             // 加载样式
             this.loadStyles();
             
-            // 声明式模块注册，顺序即依赖
-            this.registerModules();
-            
-            // 初始化所有模块
-            await this.core.initialize();
+            // 初始化Application容器
+            await this.app.initialize();
             
             // 设置UI
             this.setupUI();
@@ -5299,7 +5669,7 @@ class TomatoMonkeyApp {
             this.checkInterception();
 
             this.initialized = true;
-            console.log('[TomatoMonkey] Application initialized successfully');
+            console.log('[TomatoMonkey] Application initialized successfully with DI');
             
         } catch (error) {
             console.error('[TomatoMonkey] Failed to initialize application:', error);
@@ -5311,108 +5681,43 @@ class TomatoMonkeyApp {
         return new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
     }
     
-    registerModules() {
-        // 模块定义表：[名称, 类, 依赖]
-        const modules = [
-            ['storage', new StorageManager()],
-            ['whitelist', this.createWhitelistManager()],
-            ['task', this.createTaskManager()],
-            ['timer', this.createTimerManager()],
-            ['focus', this.createFocusPage()],
-            ['blocker', this.createBlockerManager()],
-            ['interceptor', this.createPageInterceptor()],
-            ['settings', this.createSettingsPanel()],
-            ['ui', this.createUIController()]
-        ];
-        
-        modules.forEach(([name, instance]) => {
-            this.core.register(name, instance);
-        });
-    }
     
-    createWhitelistManager() {
-        const manager = new WhitelistManager();
-        const storage = this.core.get('storage');
-        manager.initialize = async () => await manager.initialize(storage);
-        return manager;
-    }
-    
-    createTaskManager() {
-        const manager = TaskManager.getInstance();
-        const storage = this.core.get('storage');
-        manager.initialize = async () => await manager.initialize(storage);
-        return manager;
-    }
-    
-    createTimerManager() {
-        const manager = TimerManager.getInstance();
-        const storage = this.core.get('storage');
-        manager.initialize = async () => await manager.initialize(storage);
-        return manager;
-    }
-    
-    createFocusPage() {
-        const focus = new FocusPage();
-        focus.initialize = async () => {
-            const timer = this.core.get('timer');
-            const task = this.core.get('task');
-            focus.initialize(timer, task);
-        };
-        return focus;
-    }
-    
-    createBlockerManager() {
-        const blocker = BlockerManager.getInstance();
-        blocker.initialize = async () => {
-            const timer = this.core.get('timer');
-            const whitelist = this.core.get('whitelist');
-            const focus = this.core.get('focus');
-            const storage = this.core.get('storage');
-            await blocker.initialize(timer, whitelist, focus, storage);
-        };
-        return blocker;
-    }
-    
-    createPageInterceptor() {
-        const storage = this.core.get('storage');
-        const whitelist = this.core.get('whitelist');
-        return new PageInterceptor(storage, whitelist);
-    }
-    
-    createSettingsPanel() {
-        return new SettingsPanel();
-    }
-    
-    createUIController() {
-        const ui = new UIController();
-        ui.initialize = async () => {
-            const settings = this.core.get('settings');
-            const task = this.core.get('task');
-            ui.settingsPanel = settings;
-            ui.taskManager = task;
-            ui.setupUI();
-            
-            // 初始化TodoList
-            const todoContainer = document.getElementById('todo-container');
-            if (todoContainer) {
-                ui.todoList = new TodoList(todoContainer, task);
-                settings.registerTabComponent('todo', ui.todoList);
-            }
-        };
-        return ui;
-    }
+    // 原create方法已移至Application容器，此处保留兼容接口
     
     setupUI() {
-        // 由UIController处理，保持接口兼容
-        this.settingsPanel = this.core.get('settings');
-        this.taskManager = this.core.get('task');
+        console.log('[TomatoMonkey] Setting up UI...');
+        
+        // 直接使用DI容器的服务
+        this.settingsPanel = this.app.settingsPanel;
+        this.taskManager = this.app.taskService;
+        
+        // 创建UI控制器
+        const ui = new UIController(this.app.settingsPanel, this.app.taskService);
+        ui.setupUI();
+        
+        // 创建TodoList组件
+        this.setupTodoList();
+        
+        console.log('[TomatoMonkey] UI setup complete');
+    }
+    
+    setupTodoList() {
+        // 等待DOM元素创建
+        setTimeout(() => {
+            const todoContainer = document.getElementById('todo-container');
+            if (todoContainer) {
+                const todoList = this.app.createTodoList(todoContainer);
+                this.app.settingsPanel.registerTabComponent('todo', todoList);
+                console.log('[TomatoMonkey] TodoList component created');
+            }
+        }, 100);
     }
     
     checkInterception() {
-        const interceptor = this.core.get('interceptor');
+        // 创建页面拦截器
+        const interceptor = new PageInterceptor(this.app.storage, this.app.whitelistManager);
         if (interceptor.shouldBlockPage()) {
-            const blocker = this.core.get('blocker');
-            blocker.activateBlocking();
+            this.app.blockerFeature.activateBlocking();
         }
     }
 

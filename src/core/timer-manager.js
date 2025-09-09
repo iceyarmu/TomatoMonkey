@@ -1,7 +1,7 @@
 /**
- * TimerManager - 计时器管理器
+ * TimerService - Linus式依赖注入计时器服务
  *
- * 负责：
+ * 职责：
  * 1. 番茄钟计时器的核心逻辑
  * 2. 计时器状态管理（idle, running, paused, completed）
  * 3. 倒计时逻辑和实时更新
@@ -11,13 +11,10 @@
  * 7. 跨标签页同步处理
  */
 
-class TimerManager {
-  constructor() {
-    // 单例模式
-    if (TimerManager.instance) {
-      return TimerManager.instance;
-    }
-    TimerManager.instance = this;
+class TimerService {
+  constructor(storage) {
+    // 依赖注入 - 显式优于隐式
+    this.storage = storage;
 
     // 计时器状态
     this.status = "idle"; // idle, running, paused, completed
@@ -28,11 +25,8 @@ class TimerManager {
     this.totalSeconds = 1500; // 默认25分钟
     this.intervalId = null;
 
-    // 观察者列表
-    this.observers = [];
-
-    // 存储管理器引用
-    this.storageManager = null;
+    // 观察者列表 - 用Set避免重复
+    this.observers = new Set();
 
     // 通知权限状态
     this.notificationPermission = null;
@@ -46,19 +40,22 @@ class TimerManager {
 
     this.initialized = false;
 
-    console.log("[TimerManager] Created");
+    console.log("[TimerService] Created");
   }
 
   /**
-   * 初始化计时器管理器
-   * @param {StorageManager} storageManager - 存储管理器实例
+   * 初始化计时器服务
+   * @param {Storage} storageManager - 存储管理器实例（兼容参数）
    */
-  async initialize(storageManager) {
+  async initialize(storageManager = null) {
     if (this.initialized) {
       return;
     }
 
-    this.storageManager = storageManager;
+    // 兼容旧API：如果传入storageManager，使用它；否则使用注入的storage
+    if (storageManager) {
+      this.storage = storageManager;
+    }
     
     // 初始化通知权限状态（不请求权限）
     this.initializeNotificationStatus();
@@ -67,7 +64,7 @@ class TimerManager {
     await this.restoreTimerState();
 
     this.initialized = true;
-    console.log("[TimerManager] Initialized successfully");
+    console.log("[TimerService] Initialized successfully");
   }
 
   /**
@@ -81,10 +78,10 @@ class TimerManager {
     
     if (!NotificationAPI) {
       this.notificationPermission = "unsupported";
-      console.warn("[TimerManager] Browser does not support notifications");
+      console.warn("[TimerService] Browser does not support notifications");
     } else {
       this.notificationPermission = NotificationAPI.permission;
-      console.log(`[TimerManager] Initial notification permission: ${this.notificationPermission}`);
+      console.log(`[TimerService] Initial notification permission: ${this.notificationPermission}`);
     }
   }
 
@@ -99,7 +96,7 @@ class TimerManager {
     
     if (!NotificationAPI) {
       this.notificationPermission = "unsupported";
-      console.warn("[TimerManager] Browser does not support notifications");
+      console.warn("[TimerService] Browser does not support notifications");
       return;
     }
 
@@ -109,16 +106,16 @@ class TimerManager {
     // 仅在权限为 default 时请求权限
     if (this.notificationPermission === "default") {
       try {
-        console.log("[TimerManager] Requesting notification permission for focus session");
+        console.log("[TimerService] Requesting notification permission for focus session");
         const permission = await NotificationAPI.requestPermission();
         this.notificationPermission = permission;
-        console.log(`[TimerManager] Notification permission result: ${permission}`);
+        console.log(`[TimerService] Notification permission result: ${permission}`);
       } catch (error) {
-        console.error("[TimerManager] Failed to request notification permission:", error);
+        console.error("[TimerService] Failed to request notification permission:", error);
         this.notificationPermission = "denied";
       }
     } else {
-      console.log(`[TimerManager] Using existing notification permission: ${this.notificationPermission}`);
+      console.log(`[TimerService] Using existing notification permission: ${this.notificationPermission}`);
     }
   }
 
@@ -130,7 +127,7 @@ class TimerManager {
    */
   async startTimer(taskId, taskTitle, duration = 1500) {
     if (this.status === "running") {
-      console.warn("[TimerManager] Timer is already running");
+      console.warn("[TimerService] Timer is already running");
       return false;
     }
 
@@ -153,7 +150,7 @@ class TimerManager {
       remainingSeconds: this.remainingSeconds,
     });
 
-    console.log(`[TimerManager] Timer started for task: ${taskTitle} (${duration}s)`);
+    console.log(`[TimerService] Timer started for task: ${taskTitle} (${duration}s)`);
     return true;
   }
 
@@ -162,7 +159,7 @@ class TimerManager {
    */
   pauseTimer() {
     if (this.status !== "running") {
-      console.warn("[TimerManager] Timer is not running");
+      console.warn("[TimerService] Timer is not running");
       return false;
     }
 
@@ -173,7 +170,7 @@ class TimerManager {
       remainingSeconds: this.remainingSeconds,
     });
 
-    console.log("[TimerManager] Timer paused");
+    console.log("[TimerService] Timer paused");
     return true;
   }
 
@@ -182,7 +179,7 @@ class TimerManager {
    */
   resumeTimer() {
     if (this.status !== "paused") {
-      console.warn("[TimerManager] Timer is not paused");
+      console.warn("[TimerService] Timer is not paused");
       return false;
     }
 
@@ -194,7 +191,7 @@ class TimerManager {
       remainingSeconds: this.remainingSeconds,
     });
 
-    console.log("[TimerManager] Timer resumed");
+    console.log("[TimerService] Timer resumed");
     return true;
   }
 
@@ -203,7 +200,7 @@ class TimerManager {
    */
   stopTimer(donotNotify) {
     if (this.status === "idle") {
-      console.warn("[TimerManager] Timer is already idle");
+      console.warn("[TimerService] Timer is already idle");
       return false;
     }
 
@@ -216,7 +213,7 @@ class TimerManager {
       this.notifyObservers("timerStopped", {});
     }
 
-    console.log("[TimerManager] Timer stopped, state saved as idle");
+    console.log("[TimerService] Timer stopped, state saved as idle");
     return true;
   }
 
@@ -227,13 +224,13 @@ class TimerManager {
    */
   modifyTimer(newDuration) {
     if (this.status !== "running" && this.status !== "paused") {
-      console.warn("[TimerManager] Cannot modify timer when not running or paused");
+      console.warn("[TimerService] Cannot modify timer when not running or paused");
       return false;
     }
 
     // 验证新时长
     if (!Number.isInteger(newDuration) || newDuration <= 0 || newDuration > 7200) {
-      console.error("[TimerManager] Invalid duration. Must be between 1 and 7200 seconds");
+      console.error("[TimerService] Invalid duration. Must be between 1 and 7200 seconds");
       return false;
     }
 
@@ -268,7 +265,7 @@ class TimerManager {
       remainingSeconds: this.remainingSeconds,
     });
 
-    console.log(`[TimerManager] Timer duration modified from ${oldDuration}s to ${newDuration}s`);
+    console.log(`[TimerService] Timer duration modified from ${oldDuration}s to ${newDuration}s`);
     return true;
   }
 
@@ -341,7 +338,7 @@ class TimerManager {
       this.saveTimerState();
     }, 1000); // 给UI足够时间处理完成事件
 
-    console.log(`[TimerManager] Timer completed for task: ${this.taskTitle}`);
+    console.log(`[TimerService] Timer completed for task: ${this.taskTitle}`);
   }
 
   /**
@@ -383,11 +380,11 @@ class TimerManager {
         };
 
       } catch (error) {
-        console.error("[TimerManager] Failed to send notification:", error);
+        console.error("[TimerService] Failed to send notification:", error);
         this.showFallbackNotification(title, message);
       }
     } else {
-      console.warn(`[TimerManager] Notification permission: ${this.notificationPermission}`);
+      console.warn(`[TimerService] Notification permission: ${this.notificationPermission}`);
       this.showFallbackNotification(title, message);
     }
   }
@@ -462,7 +459,7 @@ class TimerManager {
    * 保存计时器状态
    */
   saveTimerState() {
-    if (!this.storageManager) return;
+    if (!this.storage) return;
 
     const state = {
       status: this.status,
@@ -474,17 +471,17 @@ class TimerManager {
       timestamp: Date.now(),
     };
 
-    this.storageManager.setData("timerState", state);
+    this.storage.setData("timerState", state);
   }
 
   /**
    * 恢复计时器状态
    */
   async restoreTimerState() {
-    if (!this.storageManager) return;
+    if (!this.storage) return;
 
     try {
-      const state = this.storageManager.getData("timerState");
+      const state = this.storage.getData("timerState");
       if (!state || state.status === "idle") {
         return;
       }
@@ -506,11 +503,11 @@ class TimerManager {
           this.status = "running";
 
           this.startCountdown();
-          console.log("[TimerManager] Timer state restored and resumed");
+          console.log("[TimerService] Timer state restored and resumed");
         } else {
           // 计时器应该已经完成了
           this.completeTimer();
-          console.log("[TimerManager] Timer completed while away");
+          console.log("[TimerService] Timer completed while away");
         }
       } else if (state.status === "paused") {
         this.taskId = state.taskId;
@@ -518,11 +515,11 @@ class TimerManager {
         this.remainingSeconds = state.remainingSeconds;
         this.totalSeconds = state.totalSeconds;
         this.status = "paused";
-        console.log("[TimerManager] Timer state restored (paused)");
+        console.log("[TimerService] Timer state restored (paused)");
       }
 
     } catch (error) {
-      console.error("[TimerManager] Failed to restore timer state:", error);
+      console.error("[TimerService] Failed to restore timer state:", error);
     }
   }
 
@@ -530,8 +527,8 @@ class TimerManager {
    * 清除保存的计时器状态
    */
   clearTimerState() {
-    if (!this.storageManager) return;
-    this.storageManager.removeData("timerState");
+    if (!this.storage) return;
+    this.storage.removeData("timerState");
   }
 
   /**
@@ -540,7 +537,7 @@ class TimerManager {
    */
   addObserver(observer) {
     if (typeof observer === "function" && !this.observers.includes(observer)) {
-      this.observers.push(observer);
+      this.observers.add(observer);
     }
   }
 
@@ -549,10 +546,8 @@ class TimerManager {
    * @param {Function} observer - 观察者回调函数
    */
   removeObserver(observer) {
-    const index = this.observers.indexOf(observer);
-    if (index > -1) {
-      this.observers.splice(index, 1);
-    }
+    this.observers.delete(observer);
+    // Observer removed using Set.delete() above
   }
 
   /**
@@ -561,13 +556,13 @@ class TimerManager {
    * @param {Object} data - 事件数据
    */
   notifyObservers(event, data) {
-    this.observers.forEach((observer) => {
+    for (const observer of this.observers) {
       try {
         observer(event, data);
       } catch (error) {
-        console.error("[TimerManager] Observer error:", error);
+        console.error("[TimerService] Observer error:", error);
       }
-    });
+    }
   }
 
   /**
@@ -622,9 +617,51 @@ class TimerManager {
   }
 
   /**
-   * 获取单例实例
-   * @returns {TimerManager} 计时器管理器实例
+   * 销毁计时器服务
    */
+  destroy() {
+    this.clearCountdown();
+    this.clearTimerState();
+    this.observers = new Set();
+    console.log("[TimerService] Destroyed");
+  }
+}
+
+// === 兼容性层 - Linus原则: Never break userspace ===
+
+/**
+ * TimerManager兼容类 - 包装TimerService以模拟单例行为
+ */
+class TimerManager {
+  constructor() {
+    if (TimerManager.instance) {
+      return TimerManager.instance;
+    }
+    
+    // 创建默认storage（临时解决方案）
+    const defaultStorage = typeof Storage !== 'undefined' 
+      ? new Storage() 
+      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
+    
+    this._timerService = new TimerService(defaultStorage);
+    TimerManager.instance = this;
+    return this;
+  }
+
+  // 代理所有方法到TimerService
+  async initialize(storageManager) { return this._timerService.initialize(storageManager); }
+  async startTimer(taskId, taskTitle, duration) { return this._timerService.startTimer(taskId, taskTitle, duration); }
+  pauseTimer() { return this._timerService.pauseTimer(); }
+  resumeTimer() { return this._timerService.resumeTimer(); }
+  stopTimer() { return this._timerService.stopTimer(); }
+  modifyTimer(newDuration) { return this._timerService.modifyTimer(newDuration); }
+  getTimerState() { return this._timerService.getTimerState(); }
+  getTaskInfo() { return this._timerService.getTaskInfo(); }
+  addObserver(observer) { return this._timerService.addObserver(observer); }
+  removeObserver(observer) { return this._timerService.removeObserver(observer); }
+  notifyObservers(event, data) { return this._timerService.notifyObservers(event, data); }
+  destroy() { return this._timerService.destroy(); }
+
   static getInstance() {
     if (!TimerManager.instance) {
       TimerManager.instance = new TimerManager();
@@ -632,30 +669,29 @@ class TimerManager {
     return TimerManager.instance;
   }
 
-  /**
-   * 销毁计时器管理器
-   */
-  destroy() {
-    this.clearCountdown();
-    this.clearTimerState();
-    this.observers = [];
-    console.log("[TimerManager] Destroyed");
+  static resetInstance() {
+    TimerManager.instance = null;
   }
 }
 
-// 创建单例实例
-const timerManager = new TimerManager();
+// 创建兼容实例
+const timerManager = TimerManager.getInstance();
 
-// 全局对象暴露
+// 浏览器环境导出
 if (typeof window !== "undefined") {
-  window.TimerManager = TimerManager;
-  window.timerManager = timerManager;
+  window.TimerService = TimerService;       // 新API
+  window.TimerManager = TimerManager;       // 兼容API
+  window.timerManager = timerManager;       // 兼容实例
 }
 
-// 模块导出 (支持 CommonJS 和 ES6)
+// 模块导出
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { TimerManager, timerManager };
+  module.exports = { 
+    TimerService,                           // 新API
+    TimerManager, timerManager,             // 兼容API
+  };
 } else if (typeof exports !== "undefined") {
-  exports.TimerManager = TimerManager;
-  exports.timerManager = timerManager;
+  exports.TimerService = TimerService;      // 新API
+  exports.TimerManager = TimerManager;      // 兼容API
+  exports.timerManager = timerManager;      // 兼容实例
 }

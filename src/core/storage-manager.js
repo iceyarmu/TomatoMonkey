@@ -1,17 +1,14 @@
 /**
- * StorageManager - 数据持久化管理器
+ * Storage - Linus式数据持久化服务
  *
- * 负责：
+ * 职责：
  * 1. 封装 Tampermonkey 的 GM_setValue/GM_getValue API
- * 2. 处理任务数据的序列化和反序列化
- * 3. 提供错误处理和数据验证
- * 4. 管理存储键值和数据格式
+ * 2. 数据序列化和反序列化（JSON）
+ * 3. 数据验证（失败就失败）
+ * 4. 简单直接的存储接口
  */
 
-/**
- * 存储管理器类
- */
-class StorageManager {
+class Storage {
   constructor() {
     // 存储键值常量
     this.STORAGE_KEYS = {
@@ -55,10 +52,10 @@ class StorageManager {
       const serializedData = JSON.stringify(storageData);
       GM_setValue(this.STORAGE_KEYS.TASKS, serializedData);
 
-      console.log(`[StorageManager] Saved ${tasks.length} tasks to storage`);
+      console.log(`[Storage] Saved ${tasks.length} tasks to storage`);
       return true;
     } catch (error) {
-      console.error("[StorageManager] Failed to save tasks:", error);
+      console.error("[Storage] Failed to save tasks:", error);
       return false;
     }
   }
@@ -73,7 +70,7 @@ class StorageManager {
 
       if (!serializedData) {
         console.log(
-          "[StorageManager] No tasks found in storage, returning empty array",
+          "[Storage] No tasks found in storage, returning empty array",
         );
         return [];
       }
@@ -84,7 +81,7 @@ class StorageManager {
       // 检查数据版本和格式
       if (!this.validateStorageData(storageData)) {
         console.warn(
-          "[StorageManager] Invalid storage data format, returning empty array",
+          "[Storage] Invalid storage data format, returning empty array",
         );
         return [];
       }
@@ -94,10 +91,10 @@ class StorageManager {
       // 验证任务数据结构
       this.validateTasksData(tasks);
 
-      console.log(`[StorageManager] Loaded ${tasks.length} tasks from storage`);
+      console.log(`[Storage] Loaded ${tasks.length} tasks from storage`);
       return tasks;
     } catch (error) {
-      console.error("[StorageManager] Failed to load tasks:", error);
+      console.error("[Storage] Failed to load tasks:", error);
       return [];
     }
   }
@@ -109,10 +106,10 @@ class StorageManager {
   async clearTasks() {
     try {
       GM_setValue(this.STORAGE_KEYS.TASKS, null);
-      console.log("[StorageManager] Cleared all tasks from storage");
+      console.log("[Storage] Cleared all tasks from storage");
       return true;
     } catch (error) {
-      console.error("[StorageManager] Failed to clear tasks:", error);
+      console.error("[Storage] Failed to clear tasks:", error);
       return false;
     }
   }
@@ -142,10 +139,10 @@ class StorageManager {
       const serializedData = JSON.stringify(storageData);
       GM_setValue(this.STORAGE_KEYS.SETTINGS, serializedData);
 
-      console.log("[StorageManager] Settings saved to storage");
+      console.log("[Storage] Settings saved to storage");
       return true;
     } catch (error) {
-      console.error("[StorageManager] Failed to save settings:", error);
+      console.error("[Storage] Failed to save settings:", error);
       return false;
     }
   }
@@ -160,7 +157,7 @@ class StorageManager {
 
       if (!serializedData) {
         console.log(
-          "[StorageManager] No settings found in storage, returning defaults",
+          "[Storage] No settings found in storage, returning defaults",
         );
         return { ...this.DEFAULT_SETTINGS };
       }
@@ -171,7 +168,7 @@ class StorageManager {
       // 检查数据版本和格式（使用设置专用的验证器）
       if (!this.validateSettingsStorageData(storageData)) {
         console.warn(
-          "[StorageManager] Invalid settings storage data, returning defaults",
+          "[Storage] Invalid settings storage data, returning defaults",
         );
         return { ...this.DEFAULT_SETTINGS };
       }
@@ -185,10 +182,10 @@ class StorageManager {
       // 验证设置数据结构
       this.validateSettingsData(settings);
 
-      console.log("[StorageManager] Settings loaded from storage");
+      console.log("[Storage] Settings loaded from storage");
       return settings;
     } catch (error) {
-      console.error("[StorageManager] Failed to load settings:", error);
+      console.error("[Storage] Failed to load settings:", error);
       return { ...this.DEFAULT_SETTINGS };
     }
   }
@@ -201,11 +198,11 @@ class StorageManager {
     try {
       const success = await this.saveSettings({ ...this.DEFAULT_SETTINGS });
       if (success) {
-        console.log("[StorageManager] Settings reset to defaults");
+        console.log("[Storage] Settings reset to defaults");
       }
       return success;
     } catch (error) {
-      console.error("[StorageManager] Failed to reset settings:", error);
+      console.error("[Storage] Failed to reset settings:", error);
       return false;
     }
   }
@@ -222,7 +219,7 @@ class StorageManager {
       GM_setValue(key, serializedData);
       return true;
     } catch (error) {
-      console.error(`[StorageManager] Failed to set data for key ${key}:`, error);
+      console.error(`[Storage] Failed to set data for key ${key}:`, error);
       return false;
     }
   }
@@ -241,7 +238,7 @@ class StorageManager {
       }
       return JSON.parse(serializedData);
     } catch (error) {
-      console.error(`[StorageManager] Failed to get data for key ${key}:`, error);
+      console.error(`[Storage] Failed to get data for key ${key}:`, error);
       return defaultValue;
     }
   }
@@ -256,7 +253,7 @@ class StorageManager {
       GM_setValue(key, undefined);
       return true;
     } catch (error) {
-      console.error(`[StorageManager] Failed to remove data for key ${key}:`, error);
+      console.error(`[Storage] Failed to remove data for key ${key}:`, error);
       return false;
     }
   }
@@ -278,7 +275,7 @@ class StorageManager {
         lastUpdated: this.getLastUpdateTime(),
       };
     } catch (error) {
-      console.error("[StorageManager] Failed to get storage stats:", error);
+      console.error("[Storage] Failed to get storage stats:", error);
       return null;
     }
   }
@@ -477,7 +474,7 @@ class StorageManager {
 
       return JSON.stringify(exportData, null, 2);
     } catch (error) {
-      console.error("[StorageManager] Failed to export tasks:", error);
+      console.error("[Storage] Failed to export tasks:", error);
       throw error;
     }
   }
@@ -498,25 +495,31 @@ class StorageManager {
       this.validateTasksData(importData.tasks);
       return await this.saveTasks(importData.tasks);
     } catch (error) {
-      console.error("[StorageManager] Failed to import tasks:", error);
+      console.error("[Storage] Failed to import tasks:", error);
       return false;
     }
   }
 }
 
 // 创建单例实例
-const storageManager = new StorageManager();
+// 兼容性导出 - Linus原则: Never break userspace
+const storage = new Storage();
+const storageManager = storage; // 兼容旧名称
 
 // 如果在浏览器环境中，将其添加到全局对象
 if (typeof window !== "undefined") {
-  window.StorageManager = StorageManager;
+  window.Storage = Storage;
+  window.StorageManager = Storage; // 兼容性
   window.storageManager = storageManager;
 }
 
 // 导出模块 (支持 CommonJS 和 ES6 模块)
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { StorageManager, storageManager };
+  module.exports = { Storage, storage, StorageManager: Storage, storageManager: storage };
 } else if (typeof exports !== "undefined") {
-  exports.StorageManager = StorageManager;
+  exports.Storage = Storage;
+  exports.StorageManager = Storage; // 兼容性
+  exports.storage = storage;
+  exports.storageManager = storage; // 兼容性
   exports.storageManager = storageManager;
 }
