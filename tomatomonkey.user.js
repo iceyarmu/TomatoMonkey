@@ -832,13 +832,6 @@ EventBus.EVENTS = {
   APP_DESTROYED: 'app:destroyed'
 };
 
-// 浏览器环境导出
-if (typeof window !== "undefined") {
-  window.EventBus = EventBus;
-}
-
-// 模块导出
-
     /**
      * Storage - Linus式数据持久化服务
      */
@@ -1335,18 +1328,6 @@ if (typeof window !== "undefined") {
   }
 }
 
-// 创建单例实例
-// 兼容性导出 - Linus原则: Never break userspace
-const storage = new Storage();
-const storageManager = storage; // 兼容旧名称
-
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.Storage = Storage;
-  window.StorageManager = Storage; // 兼容性
-  window.storageManager = storageManager;
-}
-
     /**
      * TaskService - Linus 式依赖注入任务服务
      */
@@ -1561,32 +1542,10 @@ if (typeof window !== "undefined") {
     }
   }
 
-  // === 内部实现 - Linus式简洁 ===
-
-  async saveTasks() {
-    if (!this.storageManager) {
-      console.error("[TaskManager] StorageManager not initialized");
-      return false;
-    }
-
-    try {
-      // 转换Map为Array只在保存时
-      const data = Array.from(this.tasks.values());
-      return await this.storageManager.saveTasks(data);
-    } catch (error) {
-      console.error("[TaskManager] Failed to save tasks:", error);
-      return false;
-    }
-  }
 
   // === 内部实现辅助方法 ===
 
   async saveTasks() {
-    // 兼容性方法，内部调用save()
-    return await this.save();
-  }
-
-  async save() {
     if (!this.storage) {
       console.error("[TaskService] Storage not initialized");
       return false;
@@ -1602,69 +1561,6 @@ if (typeof window !== "undefined") {
     }
   }
 }
-
-// === 兼容性层 - Linus原则: Never break userspace ===
-
-/**
- * TaskManager兼容类 - 包装TaskService以模拟单例行为
- */
-class TaskManager {
-  constructor() {
-    if (TaskManager.instance) {
-      return TaskManager.instance;
-    }
-    
-    // 创建默认storage（临时解决方案）
-    const defaultStorage = typeof Storage !== 'undefined' 
-      ? new Storage() 
-      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
-    
-    this._taskService = new TaskService(defaultStorage);
-    TaskManager.instance = this;
-    return this;
-  }
-
-  // 代理所有方法到TaskService
-  async initialize(storageManager) { return this._taskService.initialize(storageManager); }
-  async createTask(title) { return this._taskService.createTask(title); }
-  getAllTasks() { return this._taskService.getAllTasks(); }
-  getTaskById(taskId) { return this._taskService.getTaskById(taskId); }
-  getPendingTasks() { return this._taskService.getPendingTasks(); }
-  getCompletedTasks() { return this._taskService.getCompletedTasks(); }
-  async updateTaskTitle(taskId, newTitle) { return this._taskService.updateTaskTitle(taskId, newTitle); }
-  async toggleTaskCompletion(taskId) { return this._taskService.toggleTaskCompletion(taskId); }
-  async deleteTask(taskId) { return this._taskService.deleteTask(taskId); }
-  async incrementPomodoroCount(taskId, count) { return this._taskService.incrementPomodoroCount(taskId, count); }
-  async clearCompletedTasks() { return this._taskService.clearCompletedTasks(); }
-  getStatistics() { return this._taskService.getStatistics(); }
-  addObserver(observer) { return this._taskService.addObserver(observer); }
-  removeObserver(observer) { return this._taskService.removeObserver(observer); }
-  notifyObservers(event, data) { return this._taskService.notifyObservers(event, data); }
-  async saveTasks() { return this._taskService.saveTasks(); }
-
-  static getInstance() {
-    if (!TaskManager.instance) {
-      TaskManager.instance = new TaskManager();
-    }
-    return TaskManager.instance;
-  }
-
-  static resetInstance() {
-    TaskManager.instance = null;
-  }
-}
-
-// 创建兼容实例
-const taskManager = TaskManager.getInstance();
-
-// 浏览器环境导出
-if (typeof window !== "undefined") {
-  window.TaskService = TaskService;     // 新API
-  window.TaskManager = TaskManager;     // 兼容API
-  window.taskManager = taskManager;     // 兼容实例
-}
-
-// 模块导出
 
     /**
      * TimerService - Linus式依赖注入计时器服务
@@ -2289,23 +2185,17 @@ if (typeof window !== "undefined") {
      * WhitelistManager - 网站白名单管理器
      */
     /**
- * 网站白名单管理器类（单例模式）
+ * 网站白名单管理器类
  */
 class WhitelistManager {
   constructor() {
-    if (WhitelistManager.instance) {
-      return WhitelistManager.instance;
-    }
-
     this.domains = new Set(); // 使用 Set 避免重复
     this.storageManager = null; // 延迟初始化
-
-    WhitelistManager.instance = this;
   }
 
   /**
    * 初始化白名单管理器
-   * @param {StorageManager} storageManager - 存储管理器实例
+   * @param {Storage} storageManager - 存储管理器实例
    */
   async initialize(storageManager) {
     this.storageManager = storageManager;
@@ -2643,15 +2533,6 @@ class WhitelistManager {
   }
 }
 
-// 创建单例实例
-const whitelistManager = new WhitelistManager();
-
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.WhitelistManager = WhitelistManager;
-  window.whitelistManager = whitelistManager;
-}
-
     /**
      * FocusPage - 专注页面UI组件
      */
@@ -2679,16 +2560,16 @@ if (typeof window !== "undefined") {
   /**
    * 初始化专注页面
    * @param {TimerService} timerService - 计时器服务实例
-   * @param {TaskManager} taskManager - 任务管理器实例
+   * @param {TaskService} taskService - 任务服务实例
    * @param {BlockerFeature} blockerFeature - 拦截功能实例
    */
-  initialize(timerService, taskManager, blockerFeature) {
+  initialize(timerService, taskService, blockerFeature) {
     if (this.isInitialized) {
       return;
     }
 
     this.timerService = timerService;
-    this.taskManager = taskManager;
+    this.taskManager = taskService;
     this.blockerFeature = blockerFeature;
     this.createPageStructure();
     this.bindTimerService();
@@ -3714,11 +3595,6 @@ if (typeof window !== "undefined") {
   }
 }
 
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.FocusPage = FocusPage;
-}
-
     /**
      * SettingsPanel - 设置面板UI组件
      */
@@ -3726,7 +3602,7 @@ if (typeof window !== "undefined") {
  * 设置面板类
  */
 class SettingsPanel {
-  constructor(taskService = null, timerService = null) {
+  constructor(taskService = null, timerService = null, storage = null, whitelistManager = null) {
     this.isVisible = false;
     this.activeTab = "todo"; // 默认激活ToDo标签页
     this.panel = null;
@@ -3736,10 +3612,9 @@ class SettingsPanel {
     // 依赖注入 - Linus式显式依赖
     this.taskService = taskService;
     this.timerService = timerService;
+    this.storage = storage;
+    this.whitelistManager = whitelistManager;
     this.todoList = null; // TodoList组件实例
-
-    // 白名单相关
-    this.whitelistManager = null;
     this.whitelistElements = null;
     this.undoToast = null;
     this.undoTimeout = null;
@@ -4172,13 +4047,9 @@ class SettingsPanel {
    */
   async initializeWhitelist() {
     try {
-      // 初始化 WhitelistManager（需要确保 WhitelistManager 和 StorageManager 已加载）
-      if (
-        typeof window.whitelistManager !== "undefined" &&
-        typeof window.storageManager !== "undefined"
-      ) {
-        this.whitelistManager = window.whitelistManager;
-        await this.whitelistManager.initialize(window.storageManager);
+      // 初始化 WhitelistManager（需要确保 WhitelistManager 和 Storage 已加载）
+      if (this.whitelistManager && this.storage) {
+        await this.whitelistManager.initialize(this.storage);
 
         // 设置DOM元素引用
         this.setupWhitelistElements();
@@ -4653,11 +4524,6 @@ class SettingsPanel {
     this.tabs.clear();
     console.log("[SettingsPanel] Destroyed");
   }
-}
-
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.SettingsPanel = SettingsPanel;
 }
 
     /**
@@ -5376,13 +5242,6 @@ class TodoList {
     console.log("[UIWidgets] Destroyed");
   }
 }
-
-// 浏览器环境导出
-if (typeof window !== "undefined") {
-  window.UIWidgets = UIWidgets;
-}
-
-// 模块导出
     
     // ========== 应用程序主类 ==========
     
@@ -5510,8 +5369,8 @@ class Application {
   createUIComponents() {
     console.log("[Application] Creating UI components...");
     
-    // SettingsPanel - 设置面板（传入taskService和timerService依赖）
-    this.settingsPanel = new SettingsPanel(this.taskService, this.timerService);
+    // SettingsPanel - 设置面板（传入taskService、timerService、storage和whitelistManager依赖）
+    this.settingsPanel = new SettingsPanel(this.taskService, this.timerService, this.storage, this.whitelistManager);
     
     // UIWidgets - 全局UI小部件
     this.uiWidgets = new UIWidgets();

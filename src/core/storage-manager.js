@@ -501,25 +501,3 @@ class Storage {
   }
 }
 
-// 创建单例实例
-// 兼容性导出 - Linus原则: Never break userspace
-const storage = new Storage();
-const storageManager = storage; // 兼容旧名称
-
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.Storage = Storage;
-  window.StorageManager = Storage; // 兼容性
-  window.storageManager = storageManager;
-}
-
-// 导出模块 (支持 CommonJS 和 ES6 模块)
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { Storage, storage, StorageManager: Storage, storageManager: storage };
-} else if (typeof exports !== "undefined") {
-  exports.Storage = Storage;
-  exports.StorageManager = Storage; // 兼容性
-  exports.storage = storage;
-  exports.storageManager = storage; // 兼容性
-  exports.storageManager = storageManager;
-}

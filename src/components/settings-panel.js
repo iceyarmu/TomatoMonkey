@@ -13,7 +13,7 @@
  * 设置面板类
  */
 class SettingsPanel {
-  constructor(taskService = null, timerService = null) {
+  constructor(taskService = null, timerService = null, storage = null, whitelistManager = null) {
     this.isVisible = false;
     this.activeTab = "todo"; // 默认激活ToDo标签页
     this.panel = null;
@@ -23,10 +23,9 @@ class SettingsPanel {
     // 依赖注入 - Linus式显式依赖
     this.taskService = taskService;
     this.timerService = timerService;
+    this.storage = storage;
+    this.whitelistManager = whitelistManager;
     this.todoList = null; // TodoList组件实例
-
-    // 白名单相关
-    this.whitelistManager = null;
     this.whitelistElements = null;
     this.undoToast = null;
     this.undoTimeout = null;
@@ -459,13 +458,9 @@ class SettingsPanel {
    */
   async initializeWhitelist() {
     try {
-      // 初始化 WhitelistManager（需要确保 WhitelistManager 和 StorageManager 已加载）
-      if (
-        typeof window.whitelistManager !== "undefined" &&
-        typeof window.storageManager !== "undefined"
-      ) {
-        this.whitelistManager = window.whitelistManager;
-        await this.whitelistManager.initialize(window.storageManager);
+      // 初始化 WhitelistManager（需要确保 WhitelistManager 和 Storage 已加载）
+      if (this.whitelistManager && this.storage) {
+        await this.whitelistManager.initialize(this.storage);
 
         // 设置DOM元素引用
         this.setupWhitelistElements();
@@ -942,14 +937,3 @@ class SettingsPanel {
   }
 }
 
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.SettingsPanel = SettingsPanel;
-}
-
-// 导出模块
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = SettingsPanel;
-} else if (typeof exports !== "undefined") {
-  exports.SettingsPanel = SettingsPanel;
-}

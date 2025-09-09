@@ -213,14 +213,3 @@ EventBus.EVENTS = {
   APP_DESTROYED: 'app:destroyed'
 };
 
-// 浏览器环境导出
-if (typeof window !== "undefined") {
-  window.EventBus = EventBus;
-}
-
-// 模块导出
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { EventBus };
-} else if (typeof exports !== "undefined") {
-  exports.EventBus = EventBus;
-}

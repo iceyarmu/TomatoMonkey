@@ -10,23 +10,17 @@
  */
 
 /**
- * 网站白名单管理器类（单例模式）
+ * 网站白名单管理器类
  */
 class WhitelistManager {
   constructor() {
-    if (WhitelistManager.instance) {
-      return WhitelistManager.instance;
-    }
-
     this.domains = new Set(); // 使用 Set 避免重复
     this.storageManager = null; // 延迟初始化
-
-    WhitelistManager.instance = this;
   }
 
   /**
    * 初始化白名单管理器
-   * @param {StorageManager} storageManager - 存储管理器实例
+   * @param {Storage} storageManager - 存储管理器实例
    */
   async initialize(storageManager) {
     this.storageManager = storageManager;
@@ -364,19 +358,3 @@ class WhitelistManager {
   }
 }
 
-// 创建单例实例
-const whitelistManager = new WhitelistManager();
-
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.WhitelistManager = WhitelistManager;
-  window.whitelistManager = whitelistManager;
-}
-
-// 导出模块 (支持 CommonJS 和 ES6 模块)
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { WhitelistManager, whitelistManager };
-} else if (typeof exports !== "undefined") {
-  exports.WhitelistManager = WhitelistManager;
-  exports.whitelistManager = whitelistManager;
-}

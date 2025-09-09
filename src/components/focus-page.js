@@ -34,16 +34,16 @@ class FocusPage {
   /**
    * 初始化专注页面
    * @param {TimerService} timerService - 计时器服务实例
-   * @param {TaskManager} taskManager - 任务管理器实例
+   * @param {TaskService} taskService - 任务服务实例
    * @param {BlockerFeature} blockerFeature - 拦截功能实例
    */
-  initialize(timerService, taskManager, blockerFeature) {
+  initialize(timerService, taskService, blockerFeature) {
     if (this.isInitialized) {
       return;
     }
 
     this.timerService = timerService;
-    this.taskManager = taskManager;
+    this.taskManager = taskService;
     this.blockerFeature = blockerFeature;
     this.createPageStructure();
     this.bindTimerService();
@@ -1069,14 +1069,3 @@ class FocusPage {
   }
 }
 
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.FocusPage = FocusPage;
-}
-
-// 导出模块
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = FocusPage;
-} else if (typeof exports !== "undefined") {
-  exports.FocusPage = FocusPage;
-}

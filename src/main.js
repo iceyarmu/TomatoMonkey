@@ -122,8 +122,8 @@ class Application {
   createUIComponents() {
     console.log("[Application] Creating UI components...");
     
-    // SettingsPanel - 设置面板（传入taskService和timerService依赖）
-    this.settingsPanel = new SettingsPanel(this.taskService, this.timerService);
+    // SettingsPanel - 设置面板（传入taskService、timerService、storage和whitelistManager依赖）
+    this.settingsPanel = new SettingsPanel(this.taskService, this.timerService, this.storage, this.whitelistManager);
     
     // UIWidgets - 全局UI小部件
     this.uiWidgets = new UIWidgets();

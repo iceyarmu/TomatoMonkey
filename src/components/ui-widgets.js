@@ -117,14 +117,3 @@ class UIWidgets {
   }
 }
 
-// 浏览器环境导出
-if (typeof window !== "undefined") {
-  window.UIWidgets = UIWidgets;
-}
-
-// 模块导出
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { UIWidgets };
-} else if (typeof exports !== "undefined") {
-  exports.UIWidgets = UIWidgets;
-}
