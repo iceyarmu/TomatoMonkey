@@ -14,41 +14,31 @@ const SRC_DIR = path.join(ROOT_DIR, 'src');
 const OUTPUT_FILE = path.join(ROOT_DIR, 'tomatomonkey.user.js');
 
 /**
+ * Scan directory for JS modules
+ */
+function scanDirectory(dirName) {
+    const dirPath = path.join(SRC_DIR, dirName);
+    if (!fs.existsSync(dirPath)) return [];
+    
+    return fs.readdirSync(dirPath)
+        .filter(file => file.endsWith('.js'))
+        .sort()
+        .map(file => {
+            const content = readFile(path.join(dirPath, file));
+            const moduleInfo = extractModuleInfo(content, [dirName, file]);
+            return moduleInfo;
+        })
+        .filter(Boolean);
+}
+
+/**
  * Auto-discover modules by scanning filesystem
- * File system IS the configuration - no hardcoded lists
  */
 function discoverModules() {
-    const modules = [];
-    
-    // Scan core modules - load order matters, core first
-    const coreDir = path.join(SRC_DIR, 'core');
-    if (fs.existsSync(coreDir)) {
-        const coreFiles = fs.readdirSync(coreDir)
-            .filter(file => file.endsWith('.js'))
-            .sort(); // Alphabetical order for consistency
-            
-        for (const file of coreFiles) {
-            const filePath = path.join(coreDir, file);
-            const content = readFile(filePath);
-            const moduleInfo = extractModuleInfo(content, ['core', file]);
-            if (moduleInfo) modules.push(moduleInfo);
-        }
-    }
-    
-    // Scan component modules
-    const componentsDir = path.join(SRC_DIR, 'components');
-    if (fs.existsSync(componentsDir)) {
-        const componentFiles = fs.readdirSync(componentsDir)
-            .filter(file => file.endsWith('.js'))
-            .sort();
-            
-        for (const file of componentFiles) {
-            const filePath = path.join(componentsDir, file);
-            const content = readFile(filePath);
-            const moduleInfo = extractModuleInfo(content, ['components', file]);
-            if (moduleInfo) modules.push(moduleInfo);
-        }
-    }
+    const modules = [
+        ...scanDirectory('core'),
+        ...scanDirectory('components')
+    ];
     
     console.log(`📦 Discovered ${modules.length} modules automatically`);
     return modules;
@@ -77,16 +67,23 @@ function extractModuleInfo(content, pathArray) {
 }
 
 /**
+ * Scan directory for files with extension
+ */
+function scanAssets(dirName, extension) {
+    const dirPath = path.join(SRC_DIR, dirName);
+    if (!fs.existsSync(dirPath)) return [];
+    
+    return fs.readdirSync(dirPath)
+        .filter(file => file.endsWith(extension))
+        .sort()
+        .map(file => [dirName, file]);
+}
+
+/**
  * Auto-discover CSS files
  */
 function discoverCssFiles() {
-    const stylesDir = path.join(SRC_DIR, 'styles');
-    if (!fs.existsSync(stylesDir)) return [];
-    
-    return fs.readdirSync(stylesDir)
-        .filter(file => file.endsWith('.css'))
-        .sort()
-        .map(file => ['styles', file]);
+    return scanAssets('styles', '.css');
 }
 
 /**
@@ -116,54 +113,70 @@ function readFile(filePath) {
 }
 
 /**
+ * Patterns to clean from module content
+ */
+const CLEANUP_PATTERNS = [
+    /\/\/ 导出模块[\s\S]*$/m,
+    /if\s*\(typeof module[\s\S]*?\}\s*else\s+if\s*\(typeof exports[\s\S]*?\}/gm,
+    /module\.exports[\s\S]*?;/gm,
+    /exports\.\w+[\s\S]*?;/gm,
+    /^\/\*\*[\s\S]*?\*\/\n?/
+];
+
+/**
  * Clean module content - remove exports and header comments
  */
 function cleanModuleContent(content) {
-    return content
-        // Remove all export patterns - one regex to rule them all
-        .replace(/\/\/ 导出模块[\s\S]*$/m, '')
-        .replace(/if\s*\(typeof module[\s\S]*?\}\s*else\s+if\s*\(typeof exports[\s\S]*?\}/gm, '')
-        .replace(/module\.exports[\s\S]*?;/gm, '')
-        .replace(/exports\.\w+[\s\S]*?;/gm, '')
-        // Remove file header comment block
-        .replace(/^\/\*\*[\s\S]*?\*\/\n?/, '')
+    return CLEANUP_PATTERNS
+        .reduce((text, pattern) => text.replace(pattern, ''), content)
         .trim();
 }
 
 /**
- * Build the userscript
+ * Load and clean all modules
  */
-function build() {
-    console.log('Building TomatoMonkey userscript...');
-    
-    try {
-        // Auto-discover and load modules - filesystem IS the configuration
-        const modules = discoverModules().map(module => ({
-            ...module,
-            content: cleanModuleContent(readFile(path.join(SRC_DIR, ...module.path)))
-        }));
-        
-        // Auto-discover and process CSS - escape backticks and minimize
-        const cssFiles = discoverCssFiles();
-        const processedCSS = cssFiles
-            .map(cssFile => readFile(path.join(SRC_DIR, ...cssFile)))
-            .join('\n\n')
-            .replace(/`/g, '\\`')
-            .replace(/\n\s*\/\*[\s\S]*?\*\//g, '') // Remove comments
-            .replace(/\n\s+/g, '\n') // Remove extra indentation
-            .trim();
-        
-        // Generate module sections - data drives template
-        const modulesSections = modules
-            .map(module => `    /**\n     * ${module.comment}\n     */\n    ${module.content}`)
-            .join('\n\n');
-        
-        // Load and process main application template
-        const mainTemplate = readFile(path.join(SRC_DIR, 'main.js'))
-            .replace('/* CSS_PLACEHOLDER */', processedCSS);
-        
-        // Build the complete userscript - clean separation of concerns
-        const userscript = `${getMetadataBlock()}
+function loadModules() {
+    return discoverModules().map(module => ({
+        ...module,
+        content: cleanModuleContent(readFile(path.join(SRC_DIR, ...module.path)))
+    }));
+}
+
+/**
+ * Process CSS files into minified string
+ */
+function processCSS() {
+    return discoverCssFiles()
+        .map(cssFile => readFile(path.join(SRC_DIR, ...cssFile)))
+        .join('\n\n')
+        .replace(/`/g, '\\`')
+        .replace(/\n\s*\/\*[\s\S]*?\*\//g, '')
+        .replace(/\n\s+/g, '\n')
+        .trim();
+}
+
+/**
+ * Generate module sections for output
+ */
+function generateModuleSections(modules) {
+    return modules
+        .map(module => `    /**\n     * ${module.comment}\n     */\n    ${module.content}`)
+        .join('\n\n');
+}
+
+/**
+ * Process main template with CSS injection
+ */
+function processMainTemplate(css) {
+    return readFile(path.join(SRC_DIR, 'main.js'))
+        .replace('/* CSS_PLACEHOLDER */', css);
+}
+
+/**
+ * Assemble final userscript
+ */
+function assembleUserscript(modulesSections, mainTemplate) {
+    return `${getMetadataBlock()}
 
 (function() {
     'use strict';
@@ -178,18 +191,36 @@ ${mainTemplate}
 
 })();
 `;
+}
 
-        // Write the output file
-        fs.writeFileSync(OUTPUT_FILE, userscript, 'utf8');
-        
-        // Get file size
-        const stats = fs.statSync(OUTPUT_FILE);
-        const fileSizeKB = (stats.size / 1024).toFixed(2);
-        
-        console.log(`✅ Build successful!`);
-        console.log(`   Output: ${OUTPUT_FILE}`);
-        console.log(`   Size: ${fileSizeKB} KB`);
-        
+/**
+ * Write output and report results
+ */
+function writeOutput(userscript) {
+    fs.writeFileSync(OUTPUT_FILE, userscript, 'utf8');
+    
+    const stats = fs.statSync(OUTPUT_FILE);
+    const fileSizeKB = (stats.size / 1024).toFixed(2);
+    
+    console.log(`✅ Build successful!`);
+    console.log(`   Output: ${OUTPUT_FILE}`);
+    console.log(`   Size: ${fileSizeKB} KB`);
+}
+
+/**
+ * Build the userscript - clean pipeline
+ * Discover → Load → Process → Assemble → Write
+ */
+function build() {
+    console.log('Building TomatoMonkey userscript...');
+    
+    try {
+        const modules = loadModules();           // Discover & load modules
+        const css = processCSS();               // Process CSS files
+        const modulesSections = generateModuleSections(modules);  // Generate sections
+        const mainTemplate = processMainTemplate(css);           // Process main template
+        const userscript = assembleUserscript(modulesSections, mainTemplate); // Assemble output
+        writeOutput(userscript);               // Write result
     } catch (error) {
         console.error('❌ Build failed:', error);
         process.exit(1);

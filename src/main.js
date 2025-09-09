@@ -8,302 +8,292 @@
  */
 
 /**
- * TomatoMonkeyApp - 应用程序主类
+ * AppCore - 模块生命周期管理器
+ * 职责：只管理模块注册和初始化，不管其他任何事
+ */
+class AppCore {
+    constructor() {
+        this.modules = new Map();
+        this.initialized = false;
+    }
+    
+    register(name, module) {
+        this.modules.set(name, module);
+        return this;
+    }
+    
+    get(name) {
+        return this.modules.get(name);
+    }
+    
+    async initialize() {
+        for (const [name, module] of this.modules) {
+            if (typeof module.initialize === 'function') {
+                await module.initialize();
+            }
+        }
+        this.initialized = true;
+    }
+}
+
+/**
+ * PageInterceptor - 页面拦截逻辑
+ * 职责：只负责判断是否应该拦截页面
+ */
+class PageInterceptor {
+    constructor(storageManager, whitelistManager) {
+        this.storage = storageManager;
+        this.whitelist = whitelistManager;
+    }
+    
+    shouldBlockPage(url = window.location.href) {
+        const timerState = this.storage.getData("timerState");
+        const blockerState = this.storage.getData("blockerState");
+        
+        // 三个条件，一个结果，没有特殊情况
+        return timerState?.status === 'running' && 
+               blockerState?.isActive !== false &&
+               !this.whitelist.isDomainAllowed(url) && 
+               !this.isSystemUrl(url);
+    }
+    
+    isSystemUrl(url) {
+        const systemPatterns = [
+            'about:', 'chrome://', 'chrome-extension://', 'moz-extension://',
+            'edge://', 'opera://', 'file://', 'data:', 'javascript:', 'blob:',
+            'localhost', '127.0.0.1', '0.0.0.0'
+        ];
+        return systemPatterns.some(pattern => url.toLowerCase().startsWith(pattern));
+    }
+}
+
+/**
+ * UIController - 界面控制器
+ * 职责：只管理UI创建和事件
+ */
+class UIController {
+    constructor(settingsPanel, taskManager) {
+        this.settingsPanel = settingsPanel;
+        this.taskManager = taskManager;
+    }
+    
+    setupUI() {
+        this.createTriggerButton();
+        this.setupKeyboardShortcuts();
+        this.registerMenuCommands();
+    }
+    
+    createTriggerButton() {
+        const button = document.createElement('div');
+        button.id = 'tomato-monkey-trigger';
+        button.innerHTML = '🍅';
+        button.style.cssText = `
+            position: fixed; top: 20px; right: 20px;
+            width: 50px; height: 50px;
+            background: #D95550; color: white;
+            border: none; border-radius: 50%;
+            cursor: pointer; z-index: 10001;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        `;
+        
+        button.addEventListener('mouseenter', () => {
+            button.style.transform = 'scale(1.1)';
+            button.style.boxShadow = '0 6px 16px rgba(217, 85, 80, 0.4)';
+        });
+        
+        button.addEventListener('mouseleave', () => {
+            button.style.transform = 'scale(1)';
+            button.style.boxShadow = '0 4px 12px rgba(217, 85, 80, 0.3)';
+        });
+        
+        button.addEventListener('click', () => this.settingsPanel?.toggle());
+        document.body.appendChild(button);
+    }
+    
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
+                e.preventDefault();
+                this.settingsPanel?.toggle();
+            }
+        });
+    }
+    
+    registerMenuCommands() {
+        GM_registerMenuCommand('🍅 打开设置面板', () => {
+            this.settingsPanel?.toggle();
+        }, 'o');
+        
+        GM_registerMenuCommand('➕ 快速创建任务', () => {
+            this.settingsPanel?.show();
+            this.settingsPanel?.activateTab('todo');
+        }, 'n');
+    }
+}
+
+/**
+ * TomatoMonkeyApp - 轻量级应用程序控制器
+ * 职责：协调各个组件，保持向后兼容
  */
 class TomatoMonkeyApp {
     constructor() {
-        this.isInitialized = false;
-        this.modules = {};
+        this.core = new AppCore();
+        this.initialized = false;
     }
 
-    /**
-     * 初始化应用程序
-     */
     async init() {
-        if (this.isInitialized) {
-            return;
-        }
+        if (this.initialized) return;
 
         try {
             console.log('[TomatoMonkey] Initializing application...');
             
-            // 🚨 早期拦截检查 (document-start phase)
-            await this.earlyInterceptionCheck();
+            // 等待DOM，一行搞定
+            await this.waitForDOM();
             
-            // 等待DOM加载完成
-            if (document.readyState === 'loading') {
-                await new Promise(resolve => {
-                    document.addEventListener('DOMContentLoaded', resolve);
-                });
-            }
-
             // 加载样式
             this.loadStyles();
             
-            // 初始化核心模块
-            await this.initializeCore();
+            // 声明式模块注册，顺序即依赖
+            this.registerModules();
             
-            // 初始化设置面板
-            this.initializeSettingsPanel();
+            // 初始化所有模块
+            await this.core.initialize();
             
-            // 设置键盘快捷键
-            this.setupKeyboardShortcuts();
+            // 设置UI
+            this.setupUI();
             
-            // 注册 Tampermonkey 菜单命令
-            this.registerMenuCommands();
+            // 检查拦截逻辑
+            this.checkInterception();
 
-            this.isInitialized = true;
+            this.initialized = true;
             console.log('[TomatoMonkey] Application initialized successfully');
             
         } catch (error) {
             console.error('[TomatoMonkey] Failed to initialize application:', error);
         }
     }
-
-    /**
-     * 早期拦截检查 (在document-start阶段执行)
-     */
-    async earlyInterceptionCheck() {
-        const currentUrl = window.location.href;
-        console.log('[EarlyCheck] Starting early interception check for URL:', currentUrl);
-        
-        // 快速初始化存储管理器
-        const tempStorageManager = new StorageManager();
-        
-        // 添加小延迟以允许跨标签页状态更新传播
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        // 检查计时器状态
-        let timerState = tempStorageManager.getData("timerState");
-        console.log('[EarlyCheck] Retrieved timerState (first read):', timerState);
-        
-        // 双重检查：如果状态可能过时，再次读取
-        if (timerState && timerState.timestamp) {
-            const stateAge = Date.now() - timerState.timestamp;
-            if (stateAge > 1000) { // 如果状态超过1秒钟
-                console.log('[EarlyCheck] State seems old (' + stateAge + 'ms), re-reading...');
-                await new Promise(resolve => setTimeout(resolve, 100));
-                timerState = tempStorageManager.getData("timerState");
-                console.log('[EarlyCheck] Retrieved timerState (second read):', timerState);
-            }
-        }
-        
-        // 额外检查：查看拦截器状态
-        const blockerState = tempStorageManager.getData("blockerState");
-        console.log('[EarlyCheck] Retrieved blockerState:', blockerState);
-        
-        // 如果拦截器明确标记为非活动状态，不应该拦截
-        if (blockerState && blockerState.isActive === false) {
-            console.log('[EarlyCheck] PASS DECISION: BlockerState indicates blocking is inactive');
-            return;
-        }
-        
-        if (timerState && timerState.status === 'running') {
-            console.log('[EarlyCheck] Timer is running, checking whitelist for URL:', currentUrl);
-            
-            // 快速初始化白名单管理器
-            const tempWhitelistManager = new WhitelistManager();
-            await tempWhitelistManager.initialize(tempStorageManager);
-            
-            // 检查当前URL是否需要拦截
-            const shouldBlock = !tempWhitelistManager.isDomainAllowed(currentUrl);
-            console.log('[EarlyCheck] Whitelist check result - shouldBlock:', shouldBlock);
-            
-            const isExempt = this.isExemptUrl(currentUrl);
-            console.log('[EarlyCheck] URL exemption check - isExempt:', isExempt);
-            
-            if (shouldBlock && !isExempt) {
-                console.log('[EarlyCheck] BLOCKING DECISION: Page will be blocked');
-                console.log('[EarlyCheck] Timer status:', timerState.status, 'shouldBlock:', shouldBlock, 'isExempt:', isExempt);
-                // 标记需要拦截，等待完全初始化后显示拦截界面
-                this.pendingBlocking = true;
-            } else {
-                console.log('[EarlyCheck] PASS DECISION: Page will NOT be blocked');
-                console.log('[EarlyCheck] Reason - shouldBlock:', shouldBlock, 'isExempt:', isExempt);
-            }
-        } else {
-            const status = timerState ? timerState.status : 'no-timer-state';
-            console.log('[EarlyCheck] PASS DECISION: Timer not running (status: ' + status + '), page will NOT be blocked');
-        }
+    
+    async waitForDOM() {
+        if (document.readyState !== 'loading') return;
+        return new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
     }
-
-    /**
-     * 检查URL是否为豁免页面
-     */
-    isExemptUrl(url) {
-        const exemptPatterns = [
-            'about:', 'chrome://', 'chrome-extension://', 'moz-extension://',
-            'edge://', 'opera://', 'file://', 'data:', 'javascript:', 'blob:',
-            'localhost', '127.0.0.1', '0.0.0.0'
+    
+    registerModules() {
+        // 模块定义表：[名称, 类, 依赖]
+        const modules = [
+            ['storage', new StorageManager()],
+            ['whitelist', this.createWhitelistManager()],
+            ['task', this.createTaskManager()],
+            ['timer', this.createTimerManager()],
+            ['focus', this.createFocusPage()],
+            ['blocker', this.createBlockerManager()],
+            ['interceptor', this.createPageInterceptor()],
+            ['settings', this.createSettingsPanel()],
+            ['ui', this.createUIController()]
         ];
-        const lowerUrl = url.toLowerCase();
-        return exemptPatterns.some(pattern => lowerUrl.startsWith(pattern));
+        
+        modules.forEach(([name, instance]) => {
+            this.core.register(name, instance);
+        });
+    }
+    
+    createWhitelistManager() {
+        const manager = new WhitelistManager();
+        const storage = this.core.get('storage');
+        manager.initialize = async () => await manager.initialize(storage);
+        return manager;
+    }
+    
+    createTaskManager() {
+        const manager = TaskManager.getInstance();
+        const storage = this.core.get('storage');
+        manager.initialize = async () => await manager.initialize(storage);
+        return manager;
+    }
+    
+    createTimerManager() {
+        const manager = TimerManager.getInstance();
+        const storage = this.core.get('storage');
+        manager.initialize = async () => await manager.initialize(storage);
+        return manager;
+    }
+    
+    createFocusPage() {
+        const focus = new FocusPage();
+        focus.initialize = async () => {
+            const timer = this.core.get('timer');
+            const task = this.core.get('task');
+            focus.initialize(timer, task);
+        };
+        return focus;
+    }
+    
+    createBlockerManager() {
+        const blocker = BlockerManager.getInstance();
+        blocker.initialize = async () => {
+            const timer = this.core.get('timer');
+            const whitelist = this.core.get('whitelist');
+            const focus = this.core.get('focus');
+            const storage = this.core.get('storage');
+            await blocker.initialize(timer, whitelist, focus, storage);
+        };
+        return blocker;
+    }
+    
+    createPageInterceptor() {
+        const storage = this.core.get('storage');
+        const whitelist = this.core.get('whitelist');
+        return new PageInterceptor(storage, whitelist);
+    }
+    
+    createSettingsPanel() {
+        return new SettingsPanel();
+    }
+    
+    createUIController() {
+        const ui = new UIController();
+        ui.initialize = async () => {
+            const settings = this.core.get('settings');
+            const task = this.core.get('task');
+            ui.settingsPanel = settings;
+            ui.taskManager = task;
+            ui.setupUI();
+            
+            // 初始化TodoList
+            const todoContainer = document.getElementById('todo-container');
+            if (todoContainer) {
+                ui.todoList = new TodoList(todoContainer, task);
+                settings.registerTabComponent('todo', ui.todoList);
+            }
+        };
+        return ui;
+    }
+    
+    setupUI() {
+        // 由UIController处理，保持接口兼容
+        this.settingsPanel = this.core.get('settings');
+        this.taskManager = this.core.get('task');
+    }
+    
+    checkInterception() {
+        const interceptor = this.core.get('interceptor');
+        if (interceptor.shouldBlockPage()) {
+            const blocker = this.core.get('blocker');
+            blocker.activateBlocking();
+        }
     }
 
-    /**
-     * 加载CSS样式
-     */
     loadStyles() {
         const styles = `/* CSS_PLACEHOLDER */`;
         GM_addStyle(styles);
     }
-
-    /**
-     * 初始化核心模块
-     */
-    async initializeCore() {
-        // 初始化存储管理器
-        this.storageManager = new StorageManager();
-        
-        // 初始化白名单管理器
-        this.whitelistManager = new WhitelistManager();
-        await this.whitelistManager.initialize(this.storageManager);
-        
-        // 初始化任务管理器
-        this.taskManager = TaskManager.getInstance();
-        await this.taskManager.initialize(this.storageManager);
-        
-        // 初始化计时器管理器
-        this.timerManager = TimerManager.getInstance();
-        await this.timerManager.initialize(this.storageManager);
-        
-        // 初始化专注页面
-        this.focusPage = new FocusPage();
-        this.focusPage.initialize(this.timerManager, this.taskManager);
-        
-        // 初始化拦截器管理器
-        this.blockerManager = BlockerManager.getInstance();
-        await this.blockerManager.initialize(this.timerManager, this.whitelistManager, this.focusPage, this.storageManager);
-        
-        // 处理早期拦截检查的结果
-        if (this.pendingBlocking) {
-            console.log('[TomatoMonkey] Applying pending blocking from early interception check');
-            this.blockerManager.activateBlocking();
-        }
-        
-        console.log('[TomatoMonkey] Core modules initialized');
-    }
-
-    /**
-     * 初始化设置面板
-     */
-    initializeSettingsPanel() {
-        // 创建设置面板触发按钮
-        this.createTriggerButton();
-        
-        // 创建设置面板
-        this.settingsPanel = new SettingsPanel();
-        
-        // 初始化 ToDo 列表组件
-        this.initializeTodoList();
-    }
-
-    /**
-     * 初始化 ToDo 列表组件
-     */
-    initializeTodoList() {
-        // 获取 ToDo 容器
-        const todoContainer = document.getElementById('todo-container');
-        if (!todoContainer) {
-            console.error('[TomatoMonkey] Todo container not found');
-            return;
-        }
-        
-        // 创建 ToDo 列表组件
-        this.todoList = new TodoList(todoContainer, this.taskManager);
-        
-        // 注册组件到设置面板
-        this.settingsPanel.registerTabComponent('todo', this.todoList);
-        
-        console.log('[TomatoMonkey] Todo list initialized');
-    }
-
-    /**
-     * 创建触发设置面板的按钮
-     */
-    createTriggerButton() {
-        const triggerButton = document.createElement('div');
-        triggerButton.id = 'tomato-monkey-trigger';
-        triggerButton.innerHTML = '🍅';
-        triggerButton.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 50px;
-            height: 50px;
-            background: #D95550;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            z-index: 10001;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(217, 85, 80, 0.3);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        `;
-        
-        triggerButton.addEventListener('mouseenter', () => {
-            triggerButton.style.transform = 'scale(1.1)';
-            triggerButton.style.boxShadow = '0 6px 16px rgba(217, 85, 80, 0.4)';
-        });
-        
-        triggerButton.addEventListener('mouseleave', () => {
-            triggerButton.style.transform = 'scale(1)';
-            triggerButton.style.boxShadow = '0 4px 12px rgba(217, 85, 80, 0.3)';
-        });
-        
-        triggerButton.addEventListener('click', () => {
-            this.toggleSettingsPanel();
-        });
-
-        document.body.appendChild(triggerButton);
-    }
-
-    /**
-     * 切换设置面板显示状态
-     */
+    
+    // 向后兼容接口
     toggleSettingsPanel() {
-        if (this.settingsPanel) {
-            this.settingsPanel.toggle();
-        } else {
-            console.log('[TomatoMonkey] Settings panel not initialized yet');
-        }
-    }
-
-    /**
-     * 设置键盘快捷键
-     */
-    setupKeyboardShortcuts() {
-        document.addEventListener('keydown', (e) => {
-            // Ctrl/Cmd + Shift + T 打开/关闭设置面板
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
-                e.preventDefault();
-                this.toggleSettingsPanel();
-            }
-        });
-    }
-
-    /**
-     * 注册 Tampermonkey 菜单命令
-     */
-    registerMenuCommands() {
-        // 注册打开设置面板的菜单命令
-        GM_registerMenuCommand('🍅 打开设置面板', () => {
-            this.toggleSettingsPanel();
-        }, 'o');
-        
-        // 注册快速创建任务的菜单命令
-        GM_registerMenuCommand('➕ 快速创建任务', () => {
-            if (this.settingsPanel) {
-                this.settingsPanel.show();
-                this.settingsPanel.activateTab('todo');
-            }
-        }, 'n');
-        
-        console.log('[TomatoMonkey] Menu commands registered');
+        this.settingsPanel?.toggle();
     }
 
     /**
