@@ -19,10 +19,7 @@ class TomatoMonkeyApp {
         if (this.initialized) return;
 
         try {
-            console.log('[TomatoMonkey] Initializing application with DI container...');
-            
-            // 等待DOM，一行搞定
-            await this.waitForDOM();
+            console.log('[TomatoMonkey] Initializing application...');
             
             // 加载样式
             this.loadStyles();
@@ -32,25 +29,14 @@ class TomatoMonkeyApp {
             
             // 设置UI
             this.setupUI();
-            
-            // 检查拦截逻辑
-            this.checkInterception();
 
             this.initialized = true;
-            console.log('[TomatoMonkey] Application initialized successfully with DI');
+            console.log('[TomatoMonkey] Application initialized successfully');
             
         } catch (error) {
             console.error('[TomatoMonkey] Failed to initialize application:', error);
         }
     }
-    
-    async waitForDOM() {
-        if (document.readyState !== 'loading') return;
-        return new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
-    }
-    
-    
-    // 原create方法已移至Application容器，此处保留兼容接口
     
     setupUI() {
         console.log('[TomatoMonkey] Setting up UI...');
@@ -61,38 +47,15 @@ class TomatoMonkeyApp {
         
         console.log('[TomatoMonkey] UI setup complete');
     }
-    
-
-    checkInterception() {
-        // Linus式简化：直接使用BlockerFeature判断
-        if (this.app.blockerFeature.shouldBlockCurrentPage()) {
-            this.app.blockerFeature.activateBlocking();
-        }
-    }
 
     loadStyles() {
         const styles = `/* CSS_PLACEHOLDER */`;
         GM_addStyle(styles);
     }
-    
-    // 向后兼容接口
-    toggleSettingsPanel() {
-        this.settingsPanel?.toggle();
-    }
-
-    /**
-     * 获取应用程序实例
-     */
-    static getInstance() {
-        if (!TomatoMonkeyApp.instance) {
-            TomatoMonkeyApp.instance = new TomatoMonkeyApp();
-        }
-        return TomatoMonkeyApp.instance;
-    }
 }
 
 // 启动应用程序
-const app = TomatoMonkeyApp.getInstance();
+const app = new TomatoMonkeyApp();
 app.init();
 
 // 将应用程序实例暴露到页面作用域以便调试

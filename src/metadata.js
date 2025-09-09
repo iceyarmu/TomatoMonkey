@@ -12,7 +12,7 @@
 // @grant        GM_notification
 // @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
-// @run-at       document-start
+// @run-at       document-end
 // @updateURL    
 // @downloadURL  
 // ==/UserScript==
