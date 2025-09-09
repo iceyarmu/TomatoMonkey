@@ -323,6 +323,24 @@ class BlockerFeature {
   }
 
   /**
+   * 检查当前页面是否应该被拦截 - Linus式简化版本
+   * @returns {boolean} 是否应该拦截当前页面
+   */
+  shouldBlockCurrentPage() {
+    const currentUrl = window.location.href;
+    
+    // 获取必要状态
+    const timerState = this.storage.getData("timerState");
+    const blockerState = this.storage.getData("blockerState");
+    
+    // 三个条件，一个结果，没有特殊情况
+    return timerState?.status === 'running' && 
+           blockerState?.isActive !== false &&
+           !this.whitelistManager.isDomainAllowed(currentUrl) && 
+           !this.isExemptUrl(currentUrl);
+  }
+
+  /**
    * 检查URL是否为豁免页面
    * @param {string} url - 要检查的URL
    * @returns {boolean} 是否为豁免页面

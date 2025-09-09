@@ -26,6 +26,7 @@ class Application {
     this.settingsPanel = null;
     this.todoList = null;
     this.focusPage = null;
+    this.uiWidgets = null;
     
     this.initialized = false;
     console.log("[Application] Created DI container");
@@ -126,6 +127,9 @@ class Application {
     // SettingsPanel - 设置面板
     this.settingsPanel = new SettingsPanel();
     
+    // UIWidgets - 全局UI小部件
+    this.uiWidgets = new UIWidgets();
+    
     // 注意：TodoList需要容器元素，在main.js中创建
     
     console.log("[Application] UI components created");
@@ -149,7 +153,8 @@ class Application {
     this.focusPage.initialize(this.timerService, this.taskService);
     await this.blockerFeature.initialize();
     
-    // 初始化UI层（在main.js中处理）
+    // 初始化UI层
+    this.uiWidgets.initialize(this.settingsPanel);
     
     console.log("[Application] All services initialized");
   }
@@ -173,6 +178,7 @@ class Application {
     
     // 销毁顺序与创建顺序相反
     if (this.todoList) this.todoList.destroy();
+    if (this.uiWidgets) this.uiWidgets.destroy();
     if (this.settingsPanel) this.settingsPanel.destroy();
     
     if (this.blockerFeature) this.blockerFeature.destroy();
