@@ -13,15 +13,16 @@
  * 设置面板类
  */
 class SettingsPanel {
-  constructor(taskService = null) {
+  constructor(taskService = null, timerService = null) {
     this.isVisible = false;
     this.activeTab = "todo"; // 默认激活ToDo标签页
     this.panel = null;
     this.contentArea = null;
     this.tabs = new Map(); // 存储标签页组件
 
-    // 依赖注入
+    // 依赖注入 - Linus式显式依赖
     this.taskService = taskService;
+    this.timerService = timerService;
     this.todoList = null; // TodoList组件实例
 
     // 白名单相关
@@ -883,9 +884,13 @@ class SettingsPanel {
    * 创建TodoList组件 - Linus式直接方式
    */
   createTodoList() {
-    // 如果没有taskService，无法创建TodoList
+    // 如果没有taskService或timerService，无法创建TodoList
     if (!this.taskService) {
       console.warn("[SettingsPanel] TaskService not available, skipping TodoList creation");
+      return;
+    }
+    if (!this.timerService) {
+      console.warn("[SettingsPanel] TimerService not available, skipping TodoList creation");
       return;
     }
 
@@ -897,8 +902,8 @@ class SettingsPanel {
     }
 
     try {
-      // 创建TodoList实例
-      this.todoList = new TodoList(todoContainer, this.taskService);
+      // 创建TodoList实例 - 显式依赖注入
+      this.todoList = new TodoList(todoContainer, this.taskService, this.timerService);
       
       // 注册到tabConfig
       const todoTab = this.tabConfig.find(tab => tab.id === 'todo');

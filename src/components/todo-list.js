@@ -13,9 +13,10 @@
  * ToDo列表组件类
  */
 class TodoList {
-  constructor(container, taskManager) {
+  constructor(container, taskManager, timerService) {
     this.container = container;
     this.taskManager = taskManager;
+    this.timerService = timerService;
     this.isInitialized = false;
 
     // UI元素引用
@@ -291,26 +292,24 @@ class TodoList {
    */
   async startFocusSession(taskId, taskTitle) {
     try {
-      // 获取TimerManager实例
-      const timerManager = window.TimerManager ? window.TimerManager.getInstance() : null;
-      
-      if (!timerManager) {
-        this.showError("计时器模块未就绪，请刷新页面重试");
-        console.error("[TodoList] TimerManager not available");
+      // 使用依赖注入的 timerService
+      if (!this.timerService) {
+        this.showError("计时器服务未就绪，请刷新页面重试");
+        console.error("[TodoList] TimerService not available");
         return;
       }
 
       // 检查是否已有计时器在运行
-      const timerState = timerManager.getTimerState();
+      const timerState = this.timerService.getTimerState();
       if (timerState.status === "running") {
         const confirmed = confirm("已有计时器在运行中，是否要停止当前计时器并开始新的专注会话？");
         if (!confirmed) return;
         
-        timerManager.stopTimer(true);
+        this.timerService.stopTimer(true);
       }
 
       // 启动计时器 (默认25分钟) - 现在是异步调用，会在此时请求通知权限
-      const started = await timerManager.startTimer(taskId, taskTitle, 1500);
+      const started = await this.timerService.startTimer(taskId, taskTitle, 1500);
       
       if (started) {
         console.log(`[TodoList] Started focus session for task: ${taskTitle}`);
@@ -612,14 +611,3 @@ class TodoList {
   }
 }
 
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.TodoList = TodoList;
-}
-
-// 导出模块
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = TodoList;
-} else if (typeof exports !== "undefined") {
-  exports.TodoList = TodoList;
-}

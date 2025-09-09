@@ -5,7 +5,7 @@
  * 1. 专注页面的UI渲染和布局
  * 2. 倒计时的实时显示更新
  * 3. 当前任务标题的展示
- * 4. 订阅TimerManager的状态变化
+ * 4. 订阅TimerService的状态变化
  * 5. 极简无干扰的用户界面
  * 6. 页面生命周期管理
  */
@@ -22,8 +22,8 @@ class FocusPage {
     this.statusElement = null;
     this.progressElement = null;
     
-    // 计时器管理器引用
-    this.timerManager = null;
+    // 计时器服务引用
+    this.timerService = null;
     
     // 观察者回调绑定
     this.boundObserverCallback = this.handleTimerEvent.bind(this);
@@ -33,18 +33,18 @@ class FocusPage {
 
   /**
    * 初始化专注页面
-   * @param {TimerManager} timerManager - 计时器管理器实例
+   * @param {TimerService} timerService - 计时器服务实例
    * @param {TaskManager} taskManager - 任务管理器实例
    */
-  initialize(timerManager, taskManager) {
+  initialize(timerService, taskManager) {
     if (this.isInitialized) {
       return;
     }
 
-    this.timerManager = timerManager;
+    this.timerService = timerService;
     this.taskManager = taskManager;
     this.createPageStructure();
-    this.bindTimerManager();
+    this.bindTimerService();
 
     this.isInitialized = true;
     console.log("[FocusPage] Initialized successfully");
@@ -201,16 +201,16 @@ class FocusPage {
     // 暂停按钮
     const pauseBtn = this.container.querySelector("#pause-btn");
     pauseBtn.addEventListener("click", () => {
-      if (this.timerManager) {
-        this.timerManager.pauseTimer();
+      if (this.timerService) {
+        this.timerService.pauseTimer();
       }
     });
 
     // 继续按钮
     const resumeBtn = this.container.querySelector("#resume-btn");
     resumeBtn.addEventListener("click", () => {
-      if (this.timerManager) {
-        this.timerManager.resumeTimer();
+      if (this.timerService) {
+        this.timerService.resumeTimer();
       }
     });
 
@@ -296,8 +296,8 @@ class FocusPage {
    */
   showStopConfirmation() {
     const confirmed = confirm("确定要结束当前的专注时间吗？\n\n这将停止计时器并返回任务列表。");
-    if (confirmed && this.timerManager) {
-      this.timerManager.stopTimer();
+    if (confirmed && this.timerService) {
+      this.timerService.stopTimer();
     }
   }
 
@@ -330,9 +330,9 @@ class FocusPage {
       "这将停止计时器并结束拦截，让您正常浏览网站。"
     );
     
-    if (confirmed && this.timerManager) {
+    if (confirmed && this.timerService) {
       console.log("[FocusPage] User confirmed end focus from blocking mode");
-      this.timerManager.stopTimer();
+      this.timerService.stopTimer();
     }
   }
 
@@ -494,10 +494,10 @@ class FocusPage {
     const timeInput = this.container.querySelector("#time-input");
     const presetBtns = this.container.querySelectorAll(".preset-btn");
     
-    if (!this.timerManager) return;
+    if (!this.timerService) return;
 
     // 设置当前时间为默认值
-    const currentMinutes = Math.ceil(this.timerManager.totalSeconds / 60);
+    const currentMinutes = Math.ceil(this.timerService.totalSeconds / 60);
     timeInput.value = currentMinutes;
 
     // 检查是否有匹配的预设按钮
@@ -551,8 +551,8 @@ class FocusPage {
     // 转换为秒并向上取整
     const seconds = Math.ceil(minutes * 60);
 
-    // 调用TimerManager修改时间
-    if (this.timerManager && this.timerManager.modifyTimer(seconds)) {
+    // 调用TimerService修改时间
+    if (this.timerService && this.timerService.modifyTimer(seconds)) {
       this.hideTimeModificationModal();
       console.log(`[FocusPage] Timer modified to ${minutes} minutes`);
     } else {
@@ -563,19 +563,19 @@ class FocusPage {
   /**
    * 绑定计时器管理器事件
    */
-  bindTimerManager() {
-    if (!this.timerManager) return;
+  bindTimerService() {
+    if (!this.timerService) return;
 
-    this.timerManager.addObserver(this.boundObserverCallback);
+    this.timerService.addObserver(this.boundObserverCallback);
   }
 
   /**
    * 解绑计时器管理器事件
    */
-  unbindTimerManager() {
-    if (!this.timerManager) return;
+  unbindTimerService() {
+    if (!this.timerService) return;
 
-    this.timerManager.removeObserver(this.boundObserverCallback);
+    this.timerService.removeObserver(this.boundObserverCallback);
   }
 
   /**
@@ -963,7 +963,7 @@ class FocusPage {
    * 处理任务完成
    */
   async handleTaskComplete() {
-    const taskInfo = this.timerManager.getTaskInfo();
+    const taskInfo = this.timerService.getTaskInfo();
     if (this.taskManager && taskInfo && taskInfo.taskId) {
       try {
         const taskId = taskInfo.taskId;
@@ -1024,14 +1024,14 @@ class FocusPage {
     
     const seconds = Math.ceil(minutes * 60);
     
-    // 使用 TimerManager 重新启动计时器
-    const taskInfo = this.timerManager.getTaskInfo();
-    if (this.timerManager && taskInfo) {
+    // 使用 TimerService 重新启动计时器
+    const taskInfo = this.timerService.getTaskInfo();
+    if (this.timerService && taskInfo) {
       const taskId = taskInfo.taskId;
       const taskTitle = taskInfo.taskTitle;
       
       // 重新启动计时器
-      await this.timerManager.startTimer(taskId, taskTitle, seconds);
+      await this.timerService.startTimer(taskId, taskTitle, seconds);
       
       // 隐藏modal和完成按钮
       this.hideExtendTimeModal();
@@ -1054,7 +1054,7 @@ class FocusPage {
    * 销毁专注页面
    */
   destroy() {
-    this.unbindTimerManager();
+    this.unbindTimerService();
     
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);

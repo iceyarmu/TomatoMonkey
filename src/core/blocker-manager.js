@@ -37,24 +37,24 @@ class BlockerFeature {
 
   /**
    * 初始化拦截器管理器
-   * @param {TimerManager} timerManager - 计时器管理器实例
+   * @param {TimerService} timerService - 计时器服务实例
    * @param {WhitelistManager} whitelistManager - 白名单管理器实例
    * @param {FocusPage} focusPage - 专注页面组件实例
    * @param {StorageManager} storageManager - 存储管理器实例
    */
-  async initialize(timerManager = null, whitelistManager = null, focusPage = null, storageManager = null) {
+  async initialize(timerService = null, whitelistManager = null, focusPage = null, storageManager = null) {
     if (this.initialized) {
       return;
     }
 
     // 兼容旧API：如果传入参数，使用它们；否则使用注入的依赖
-    if (timerManager) this.timerService = timerManager;
+    if (timerService) this.timerService = timerService;
     if (whitelistManager) this.whitelistManager = whitelistManager;
     if (focusPage) this.focusPage = focusPage;
     if (storageManager) this.storage = storageManager;
 
     // 监听计时器状态变化
-    this.bindTimerManager();
+    this.bindTimerService();
 
     // 检查当前页面是否需要拦截
     await this.checkCurrentPageBlocking();
@@ -69,7 +69,7 @@ class BlockerFeature {
   /**
    * 绑定计时器管理器事件
    */
-  bindTimerManager() {
+  bindTimerService() {
     if (!this.timerService) return;
     this.timerService.addObserver(this.boundTimerObserver);
   }
@@ -77,7 +77,7 @@ class BlockerFeature {
   /**
    * 解绑计时器管理器事件
    */
-  unbindTimerManager() {
+  unbindTimerService() {
     if (!this.timerService) return;
     this.timerService.removeObserver(this.boundTimerObserver);
   }
@@ -186,7 +186,7 @@ class BlockerFeature {
     this.isCurrentPageBlocked = true;
     console.log(`[BlockerFeature] Blocking current page: ${window.location.href}`);
 
-    // 🚨 关键修复：直接调用FocusPage.show()绕过TimerManager同步缺陷
+    // 🚨 关键修复：直接调用FocusPage.show()绕过TimerService同步缺陷
     if (this.focusPage) {
       // 确保FocusPage知道当前是拦截场景
       this.setupBlockingContext();
@@ -596,7 +596,7 @@ class BlockerFeature {
    * 销毁拦截功能
    */
   destroy() {
-    this.unbindTimerManager();
+    this.unbindTimerService();
     this.deactivateBlocking();
     this.clearCache();
     
@@ -631,8 +631,8 @@ class BlockerManager {
   }
 
   // 代理所有方法到BlockerFeature
-  async initialize(timerManager, whitelistManager, focusPage, storageManager) {
-    return this._blockerFeature.initialize(timerManager, whitelistManager, focusPage, storageManager);
+  async initialize(timerService, whitelistManager, focusPage, storageManager) {
+    return this._blockerFeature.initialize(timerService, whitelistManager, focusPage, storageManager);
   }
   activateBlocking(byTimer = false) { return this._blockerFeature.activateBlocking(byTimer); }
   deactivateBlocking() { return this._blockerFeature.deactivateBlocking(); }

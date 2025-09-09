@@ -12,7 +12,7 @@
 // @grant        GM_notification
 // @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
-// @run-at       document-start
+// @run-at       document-end
 // @updateURL    
 // @downloadURL  
 // ==/UserScript==
@@ -22,199 +22,6 @@
 
     // ========== 核心模块 ==========
     
-    /**
-     * Application - Linus式依赖注入容器
-     */
-    class Application {
-  constructor() {
-    // 核心服务层
-    this.storage = null;
-    this.eventBus = null;
-    
-    // 业务服务层
-    this.taskService = null;
-    this.timerService = null;
-    this.whitelistManager = null;
-    
-    // 功能层
-    this.blockerFeature = null;
-    
-    // UI层
-    this.settingsPanel = null;
-    this.focusPage = null;
-    this.uiWidgets = null;
-    
-    this.initialized = false;
-    console.log("[Application] Created DI container");
-  }
-
-  /**
-   * 初始化应用程序 - Linus式依赖创建
-   */
-  async initialize() {
-    if (this.initialized) return;
-
-    try {
-      console.log("[Application] Initializing dependency injection container...");
-      
-      // 第一层：核心服务（无依赖）
-      this.createCoreServices();
-      
-      // 第二层：业务服务（依赖核心服务）
-      this.createBusinessServices();
-      
-      // 第三层：功能模块（依赖业务服务）
-      this.createFeatures();
-      
-      // 第四层：UI组件（依赖功能模块）
-      this.createUIComponents();
-      
-      // 初始化所有服务
-      await this.initializeServices();
-      
-      this.initialized = true;
-      console.log("[Application] DI container initialized successfully");
-      
-    } catch (error) {
-      console.error("[Application] Failed to initialize:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * 创建核心服务层 - 无依赖
-   */
-  createCoreServices() {
-    console.log("[Application] Creating core services...");
-    
-    // Storage - 数据持久化服务
-    this.storage = new Storage();
-    
-    // EventBus - 事件总线
-    this.eventBus = new EventBus();
-    
-    console.log("[Application] Core services created");
-  }
-
-  /**
-   * 创建业务服务层 - 依赖核心服务
-   */
-  createBusinessServices() {
-    console.log("[Application] Creating business services...");
-    
-    // TaskService - 任务管理服务
-    this.taskService = new TaskService(this.storage);
-    
-    // TimerService - 计时器服务
-    this.timerService = new TimerService(this.storage);
-    
-    // WhitelistManager - 白名单管理（暂时保持原样）
-    this.whitelistManager = new WhitelistManager();
-    
-    console.log("[Application] Business services created");
-  }
-
-  /**
-   * 创建功能层 - 依赖业务服务
-   */
-  createFeatures() {
-    console.log("[Application] Creating feature modules...");
-    
-    // FocusPage - 专注页面组件
-    this.focusPage = new FocusPage();
-    
-    // BlockerFeature - 拦截功能
-    this.blockerFeature = new BlockerFeature(
-      this.timerService,
-      this.whitelistManager, 
-      this.focusPage,
-      this.storage
-    );
-    
-    console.log("[Application] Feature modules created");
-  }
-
-  /**
-   * 创建UI组件层 - 依赖功能模块和业务服务
-   */
-  createUIComponents() {
-    console.log("[Application] Creating UI components...");
-    
-    // SettingsPanel - 设置面板（传入taskService依赖）
-    this.settingsPanel = new SettingsPanel(this.taskService);
-    
-    // UIWidgets - 全局UI小部件
-    this.uiWidgets = new UIWidgets();
-    
-    // 注意：TodoList现在由SettingsPanel管理
-    
-    console.log("[Application] UI components created");
-  }
-
-  /**
-   * 初始化所有服务 - 按依赖顺序
-   */
-  async initializeServices() {
-    console.log("[Application] Initializing services in dependency order...");
-    
-    // 初始化核心服务
-    // Storage 无需初始化
-    
-    // 初始化业务服务
-    await this.taskService.initialize();
-    await this.timerService.initialize();
-    await this.whitelistManager.initialize(this.storage);
-    
-    // 初始化功能层
-    this.focusPage.initialize(this.timerService, this.taskService);
-    await this.blockerFeature.initialize();
-    
-    // 初始化UI层
-    this.uiWidgets.initialize(this.settingsPanel);
-    
-    console.log("[Application] All services initialized");
-  }
-
-  /**
-   * 获取服务实例 - 简单的服务定位器
-   */
-  getService(name) {
-    const service = this[name];
-    if (!service) {
-      throw new Error(`[Application] Service '${name}' not found`);
-    }
-    return service;
-  }
-
-  /**
-   * 销毁应用程序
-   */
-  destroy() {
-    console.log("[Application] Destroying DI container...");
-    
-    // 销毁顺序与创建顺序相反
-    if (this.uiWidgets) this.uiWidgets.destroy();
-    if (this.settingsPanel) this.settingsPanel.destroy();
-    
-    if (this.blockerFeature) this.blockerFeature.destroy();
-    if (this.focusPage) this.focusPage.destroy();
-    
-    if (this.timerService) this.timerService.destroy();
-    // TaskService 和 Storage 无需特殊销毁
-    
-    this.initialized = false;
-    console.log("[Application] DI container destroyed");
-  }
-
-}
-
-// 浏览器环境导出
-if (typeof window !== "undefined") {
-  window.Application = Application;
-}
-
-// 模块导出
-
     /**
      * BlockerFeature - Linus式依赖注入拦截功能
      */
@@ -245,24 +52,24 @@ if (typeof window !== "undefined") {
 
   /**
    * 初始化拦截器管理器
-   * @param {TimerManager} timerManager - 计时器管理器实例
+   * @param {TimerService} timerService - 计时器服务实例
    * @param {WhitelistManager} whitelistManager - 白名单管理器实例
    * @param {FocusPage} focusPage - 专注页面组件实例
    * @param {StorageManager} storageManager - 存储管理器实例
    */
-  async initialize(timerManager = null, whitelistManager = null, focusPage = null, storageManager = null) {
+  async initialize(timerService = null, whitelistManager = null, focusPage = null, storageManager = null) {
     if (this.initialized) {
       return;
     }
 
     // 兼容旧API：如果传入参数，使用它们；否则使用注入的依赖
-    if (timerManager) this.timerService = timerManager;
+    if (timerService) this.timerService = timerService;
     if (whitelistManager) this.whitelistManager = whitelistManager;
     if (focusPage) this.focusPage = focusPage;
     if (storageManager) this.storage = storageManager;
 
     // 监听计时器状态变化
-    this.bindTimerManager();
+    this.bindTimerService();
 
     // 检查当前页面是否需要拦截
     await this.checkCurrentPageBlocking();
@@ -277,7 +84,7 @@ if (typeof window !== "undefined") {
   /**
    * 绑定计时器管理器事件
    */
-  bindTimerManager() {
+  bindTimerService() {
     if (!this.timerService) return;
     this.timerService.addObserver(this.boundTimerObserver);
   }
@@ -285,7 +92,7 @@ if (typeof window !== "undefined") {
   /**
    * 解绑计时器管理器事件
    */
-  unbindTimerManager() {
+  unbindTimerService() {
     if (!this.timerService) return;
     this.timerService.removeObserver(this.boundTimerObserver);
   }
@@ -394,7 +201,7 @@ if (typeof window !== "undefined") {
     this.isCurrentPageBlocked = true;
     console.log(`[BlockerFeature] Blocking current page: ${window.location.href}`);
 
-    // 🚨 关键修复：直接调用FocusPage.show()绕过TimerManager同步缺陷
+    // 🚨 关键修复：直接调用FocusPage.show()绕过TimerService同步缺陷
     if (this.focusPage) {
       // 确保FocusPage知道当前是拦截场景
       this.setupBlockingContext();
@@ -804,7 +611,7 @@ if (typeof window !== "undefined") {
    * 销毁拦截功能
    */
   destroy() {
-    this.unbindTimerManager();
+    this.unbindTimerService();
     this.deactivateBlocking();
     this.clearCache();
     
@@ -839,8 +646,8 @@ class BlockerManager {
   }
 
   // 代理所有方法到BlockerFeature
-  async initialize(timerManager, whitelistManager, focusPage, storageManager) {
-    return this._blockerFeature.initialize(timerManager, whitelistManager, focusPage, storageManager);
+  async initialize(timerService, whitelistManager, focusPage, storageManager) {
+    return this._blockerFeature.initialize(timerService, whitelistManager, focusPage, storageManager);
   }
   activateBlocking(byTimer = false) { return this._blockerFeature.activateBlocking(byTimer); }
   deactivateBlocking() { return this._blockerFeature.deactivateBlocking(); }
@@ -2537,65 +2344,6 @@ if (typeof window !== "undefined") {
   }
 }
 
-// === 兼容性层 - Linus原则: Never break userspace ===
-
-/**
- * TimerManager兼容类 - 包装TimerService以模拟单例行为
- */
-class TimerManager {
-  constructor() {
-    if (TimerManager.instance) {
-      return TimerManager.instance;
-    }
-    
-    // 创建默认storage（临时解决方案）
-    const defaultStorage = typeof Storage !== 'undefined' 
-      ? new Storage() 
-      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
-    
-    this._timerService = new TimerService(defaultStorage);
-    TimerManager.instance = this;
-    return this;
-  }
-
-  // 代理所有方法到TimerService
-  async initialize(storageManager) { return this._timerService.initialize(storageManager); }
-  async startTimer(taskId, taskTitle, duration) { return this._timerService.startTimer(taskId, taskTitle, duration); }
-  pauseTimer() { return this._timerService.pauseTimer(); }
-  resumeTimer() { return this._timerService.resumeTimer(); }
-  stopTimer() { return this._timerService.stopTimer(); }
-  modifyTimer(newDuration) { return this._timerService.modifyTimer(newDuration); }
-  getTimerState() { return this._timerService.getTimerState(); }
-  getTaskInfo() { return this._timerService.getTaskInfo(); }
-  addObserver(observer) { return this._timerService.addObserver(observer); }
-  removeObserver(observer) { return this._timerService.removeObserver(observer); }
-  notifyObservers(event, data) { return this._timerService.notifyObservers(event, data); }
-  destroy() { return this._timerService.destroy(); }
-
-  static getInstance() {
-    if (!TimerManager.instance) {
-      TimerManager.instance = new TimerManager();
-    }
-    return TimerManager.instance;
-  }
-
-  static resetInstance() {
-    TimerManager.instance = null;
-  }
-}
-
-// 创建兼容实例
-const timerManager = TimerManager.getInstance();
-
-// 浏览器环境导出
-if (typeof window !== "undefined") {
-  window.TimerService = TimerService;       // 新API
-  window.TimerManager = TimerManager;       // 兼容API
-  window.timerManager = timerManager;       // 兼容实例
-}
-
-// 模块导出
-
     /**
      * WhitelistManager - 网站白名单管理器
      */
@@ -2978,8 +2726,8 @@ if (typeof window !== "undefined") {
     this.statusElement = null;
     this.progressElement = null;
     
-    // 计时器管理器引用
-    this.timerManager = null;
+    // 计时器服务引用
+    this.timerService = null;
     
     // 观察者回调绑定
     this.boundObserverCallback = this.handleTimerEvent.bind(this);
@@ -2989,18 +2737,18 @@ if (typeof window !== "undefined") {
 
   /**
    * 初始化专注页面
-   * @param {TimerManager} timerManager - 计时器管理器实例
+   * @param {TimerService} timerService - 计时器服务实例
    * @param {TaskManager} taskManager - 任务管理器实例
    */
-  initialize(timerManager, taskManager) {
+  initialize(timerService, taskManager) {
     if (this.isInitialized) {
       return;
     }
 
-    this.timerManager = timerManager;
+    this.timerService = timerService;
     this.taskManager = taskManager;
     this.createPageStructure();
-    this.bindTimerManager();
+    this.bindTimerService();
 
     this.isInitialized = true;
     console.log("[FocusPage] Initialized successfully");
@@ -3157,16 +2905,16 @@ if (typeof window !== "undefined") {
     // 暂停按钮
     const pauseBtn = this.container.querySelector("#pause-btn");
     pauseBtn.addEventListener("click", () => {
-      if (this.timerManager) {
-        this.timerManager.pauseTimer();
+      if (this.timerService) {
+        this.timerService.pauseTimer();
       }
     });
 
     // 继续按钮
     const resumeBtn = this.container.querySelector("#resume-btn");
     resumeBtn.addEventListener("click", () => {
-      if (this.timerManager) {
-        this.timerManager.resumeTimer();
+      if (this.timerService) {
+        this.timerService.resumeTimer();
       }
     });
 
@@ -3252,8 +3000,8 @@ if (typeof window !== "undefined") {
    */
   showStopConfirmation() {
     const confirmed = confirm("确定要结束当前的专注时间吗？\n\n这将停止计时器并返回任务列表。");
-    if (confirmed && this.timerManager) {
-      this.timerManager.stopTimer();
+    if (confirmed && this.timerService) {
+      this.timerService.stopTimer();
     }
   }
 
@@ -3286,9 +3034,9 @@ if (typeof window !== "undefined") {
       "这将停止计时器并结束拦截，让您正常浏览网站。"
     );
     
-    if (confirmed && this.timerManager) {
+    if (confirmed && this.timerService) {
       console.log("[FocusPage] User confirmed end focus from blocking mode");
-      this.timerManager.stopTimer();
+      this.timerService.stopTimer();
     }
   }
 
@@ -3450,10 +3198,10 @@ if (typeof window !== "undefined") {
     const timeInput = this.container.querySelector("#time-input");
     const presetBtns = this.container.querySelectorAll(".preset-btn");
     
-    if (!this.timerManager) return;
+    if (!this.timerService) return;
 
     // 设置当前时间为默认值
-    const currentMinutes = Math.ceil(this.timerManager.totalSeconds / 60);
+    const currentMinutes = Math.ceil(this.timerService.totalSeconds / 60);
     timeInput.value = currentMinutes;
 
     // 检查是否有匹配的预设按钮
@@ -3507,8 +3255,8 @@ if (typeof window !== "undefined") {
     // 转换为秒并向上取整
     const seconds = Math.ceil(minutes * 60);
 
-    // 调用TimerManager修改时间
-    if (this.timerManager && this.timerManager.modifyTimer(seconds)) {
+    // 调用TimerService修改时间
+    if (this.timerService && this.timerService.modifyTimer(seconds)) {
       this.hideTimeModificationModal();
       console.log(`[FocusPage] Timer modified to ${minutes} minutes`);
     } else {
@@ -3519,19 +3267,19 @@ if (typeof window !== "undefined") {
   /**
    * 绑定计时器管理器事件
    */
-  bindTimerManager() {
-    if (!this.timerManager) return;
+  bindTimerService() {
+    if (!this.timerService) return;
 
-    this.timerManager.addObserver(this.boundObserverCallback);
+    this.timerService.addObserver(this.boundObserverCallback);
   }
 
   /**
    * 解绑计时器管理器事件
    */
-  unbindTimerManager() {
-    if (!this.timerManager) return;
+  unbindTimerService() {
+    if (!this.timerService) return;
 
-    this.timerManager.removeObserver(this.boundObserverCallback);
+    this.timerService.removeObserver(this.boundObserverCallback);
   }
 
   /**
@@ -3919,7 +3667,7 @@ if (typeof window !== "undefined") {
    * 处理任务完成
    */
   async handleTaskComplete() {
-    const taskInfo = this.timerManager.getTaskInfo();
+    const taskInfo = this.timerService.getTaskInfo();
     if (this.taskManager && taskInfo && taskInfo.taskId) {
       try {
         const taskId = taskInfo.taskId;
@@ -3980,14 +3728,14 @@ if (typeof window !== "undefined") {
     
     const seconds = Math.ceil(minutes * 60);
     
-    // 使用 TimerManager 重新启动计时器
-    const taskInfo = this.timerManager.getTaskInfo();
-    if (this.timerManager && taskInfo) {
+    // 使用 TimerService 重新启动计时器
+    const taskInfo = this.timerService.getTaskInfo();
+    if (this.timerService && taskInfo) {
       const taskId = taskInfo.taskId;
       const taskTitle = taskInfo.taskTitle;
       
       // 重新启动计时器
-      await this.timerManager.startTimer(taskId, taskTitle, seconds);
+      await this.timerService.startTimer(taskId, taskTitle, seconds);
       
       // 隐藏modal和完成按钮
       this.hideExtendTimeModal();
@@ -4010,7 +3758,7 @@ if (typeof window !== "undefined") {
    * 销毁专注页面
    */
   destroy() {
-    this.unbindTimerManager();
+    this.unbindTimerService();
     
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
@@ -4039,15 +3787,16 @@ if (typeof window !== "undefined") {
  * 设置面板类
  */
 class SettingsPanel {
-  constructor(taskService = null) {
+  constructor(taskService = null, timerService = null) {
     this.isVisible = false;
     this.activeTab = "todo"; // 默认激活ToDo标签页
     this.panel = null;
     this.contentArea = null;
     this.tabs = new Map(); // 存储标签页组件
 
-    // 依赖注入
+    // 依赖注入 - Linus式显式依赖
     this.taskService = taskService;
+    this.timerService = timerService;
     this.todoList = null; // TodoList组件实例
 
     // 白名单相关
@@ -4909,9 +4658,13 @@ class SettingsPanel {
    * 创建TodoList组件 - Linus式直接方式
    */
   createTodoList() {
-    // 如果没有taskService，无法创建TodoList
+    // 如果没有taskService或timerService，无法创建TodoList
     if (!this.taskService) {
       console.warn("[SettingsPanel] TaskService not available, skipping TodoList creation");
+      return;
+    }
+    if (!this.timerService) {
+      console.warn("[SettingsPanel] TimerService not available, skipping TodoList creation");
       return;
     }
 
@@ -4923,8 +4676,8 @@ class SettingsPanel {
     }
 
     try {
-      // 创建TodoList实例
-      this.todoList = new TodoList(todoContainer, this.taskService);
+      // 创建TodoList实例 - 显式依赖注入
+      this.todoList = new TodoList(todoContainer, this.taskService, this.timerService);
       
       // 注册到tabConfig
       const todoTab = this.tabConfig.find(tab => tab.id === 'todo');
@@ -4975,9 +4728,10 @@ if (typeof window !== "undefined") {
  * ToDo列表组件类
  */
 class TodoList {
-  constructor(container, taskManager) {
+  constructor(container, taskManager, timerService) {
     this.container = container;
     this.taskManager = taskManager;
+    this.timerService = timerService;
     this.isInitialized = false;
 
     // UI元素引用
@@ -5253,26 +5007,24 @@ class TodoList {
    */
   async startFocusSession(taskId, taskTitle) {
     try {
-      // 获取TimerManager实例
-      const timerManager = window.TimerManager ? window.TimerManager.getInstance() : null;
-      
-      if (!timerManager) {
-        this.showError("计时器模块未就绪，请刷新页面重试");
-        console.error("[TodoList] TimerManager not available");
+      // 使用依赖注入的 timerService
+      if (!this.timerService) {
+        this.showError("计时器服务未就绪，请刷新页面重试");
+        console.error("[TodoList] TimerService not available");
         return;
       }
 
       // 检查是否已有计时器在运行
-      const timerState = timerManager.getTimerState();
+      const timerState = this.timerService.getTimerState();
       if (timerState.status === "running") {
         const confirmed = confirm("已有计时器在运行中，是否要停止当前计时器并开始新的专注会话？");
         if (!confirmed) return;
         
-        timerManager.stopTimer(true);
+        this.timerService.stopTimer(true);
       }
 
       // 启动计时器 (默认25分钟) - 现在是异步调用，会在此时请求通知权限
-      const started = await timerManager.startTimer(taskId, taskTitle, 1500);
+      const started = await this.timerService.startTimer(taskId, taskTitle, 1500);
       
       if (started) {
         console.log(`[TodoList] Started focus session for task: ${taskTitle}`);
@@ -5574,11 +5326,6 @@ class TodoList {
   }
 }
 
-// 如果在浏览器环境中，将其添加到全局对象
-if (typeof window !== "undefined") {
-  window.TodoList = TodoList;
-}
-
     /**
      * UIWidgets - 全局UI小部件管理器
      */
@@ -5708,72 +5455,191 @@ if (typeof window !== "undefined") {
  * 2. 加载核心模块
  * 3. 启动应用程序
  */
-class TomatoMonkeyApp {
-    constructor() {
-        // 使用Application依赖注入容器
-        this.app = new Application();
-        this.initialized = false;
-        
-        console.log('[TomatoMonkey] Created app with DI container');
-    }
 
-    async init() {
-        if (this.initialized) return;
+class Application {
+  constructor() {
+    // 核心服务层
+    this.storage = null;
+    this.eventBus = null;
+    
+    // 业务服务层
+    this.taskService = null;
+    this.timerService = null;
+    this.whitelistManager = null;
+    
+    // 功能层
+    this.blockerFeature = null;
+    
+    // UI层
+    this.settingsPanel = null;
+    this.focusPage = null;
+    this.uiWidgets = null;
+    
+    this.initialized = false;
+    console.log("[Application] Created DI container");
+  }
 
-        try {
-            console.log('[TomatoMonkey] Initializing application with DI container...');
-            
-            // 等待DOM，一行搞定
-            await this.waitForDOM();
-            
-            // 加载样式
-            this.loadStyles();
-            
-            // 初始化Application容器
-            await this.app.initialize();
-            
-            // 设置UI
-            this.setupUI();
-            
-            // 检查拦截逻辑
-            this.checkInterception();
+  /**
+   * 初始化应用程序 - Linus式依赖创建
+   */
+  async initialize() {
+    if (this.initialized) return;
 
-            this.initialized = true;
-            console.log('[TomatoMonkey] Application initialized successfully with DI');
-            
-        } catch (error) {
-            console.error('[TomatoMonkey] Failed to initialize application:', error);
-        }
+    try {
+      console.log("[Application] Initializing dependency injection container...");
+      
+      // 第一层：核心服务（无依赖）
+      this.createCoreServices();
+      
+      // 第二层：业务服务（依赖核心服务）
+      this.createBusinessServices();
+      
+      // 第三层：功能模块（依赖业务服务）
+      this.createFeatures();
+      
+      // 第四层：UI组件（依赖功能模块）
+      this.createUIComponents();
+      
+      // 初始化所有服务
+      await this.initializeServices();
+      
+      this.initialized = true;
+      console.log("[Application] DI container initialized successfully");
+      
+    } catch (error) {
+      console.error("[Application] Failed to initialize:", error);
+      throw error;
     }
-    
-    async waitForDOM() {
-        if (document.readyState !== 'loading') return;
-        return new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
-    }
-    
-    
-    // 原create方法已移至Application容器，此处保留兼容接口
-    
-    setupUI() {
-        console.log('[TomatoMonkey] Setting up UI...');
-        
-        // 直接使用DI容器的服务（UIWidgets和TodoList已在Application中自动初始化）
-        this.settingsPanel = this.app.settingsPanel;
-        this.taskManager = this.app.taskService;
-        
-        console.log('[TomatoMonkey] UI setup complete');
-    }
-    
+  }
 
-    checkInterception() {
-        // Linus式简化：直接使用BlockerFeature判断
-        if (this.app.blockerFeature.shouldBlockCurrentPage()) {
-            this.app.blockerFeature.activateBlocking();
-        }
-    }
+  /**
+   * 创建核心服务层 - 无依赖
+   */
+  createCoreServices() {
+    console.log("[Application] Creating core services...");
+    
+    // Storage - 数据持久化服务
+    this.storage = new Storage();
+    
+    // EventBus - 事件总线
+    this.eventBus = new EventBus();
+    
+    console.log("[Application] Core services created");
+  }
 
-    loadStyles() {
-        const styles = `/**
+  /**
+   * 创建业务服务层 - 依赖核心服务
+   */
+  createBusinessServices() {
+    console.log("[Application] Creating business services...");
+    
+    // TaskService - 任务管理服务
+    this.taskService = new TaskService(this.storage);
+    
+    // TimerService - 计时器服务
+    this.timerService = new TimerService(this.storage);
+    
+    // WhitelistManager - 白名单管理（暂时保持原样）
+    this.whitelistManager = new WhitelistManager();
+    
+    console.log("[Application] Business services created");
+  }
+
+  /**
+   * 创建功能层 - 依赖业务服务
+   */
+  createFeatures() {
+    console.log("[Application] Creating feature modules...");
+    
+    // FocusPage - 专注页面组件
+    this.focusPage = new FocusPage();
+    
+    // BlockerFeature - 拦截功能
+    this.blockerFeature = new BlockerFeature(
+      this.timerService,
+      this.whitelistManager, 
+      this.focusPage,
+      this.storage
+    );
+    
+    console.log("[Application] Feature modules created");
+  }
+
+  /**
+   * 创建UI组件层 - 依赖功能模块和业务服务
+   */
+  createUIComponents() {
+    console.log("[Application] Creating UI components...");
+    
+    // SettingsPanel - 设置面板（传入taskService和timerService依赖）
+    this.settingsPanel = new SettingsPanel(this.taskService, this.timerService);
+    
+    // UIWidgets - 全局UI小部件
+    this.uiWidgets = new UIWidgets();
+    
+    // 注意：TodoList现在由SettingsPanel管理
+    
+    console.log("[Application] UI components created");
+  }
+
+  /**
+   * 初始化所有服务 - 按依赖顺序
+   */
+  async initializeServices() {
+    console.log("[Application] Initializing services in dependency order...");
+    
+    // 初始化核心服务
+    // Storage 无需初始化
+    
+    // 初始化业务服务
+    await this.taskService.initialize();
+    await this.timerService.initialize();
+    await this.whitelistManager.initialize(this.storage);
+    
+    // 初始化功能层
+    this.focusPage.initialize(this.timerService, this.taskService);
+    await this.blockerFeature.initialize();
+    
+    // 初始化UI层
+    this.uiWidgets.initialize(this.settingsPanel);
+    
+    console.log("[Application] All services initialized");
+  }
+
+  /**
+   * 获取服务实例 - 简单的服务定位器
+   */
+  getService(name) {
+    const service = this[name];
+    if (!service) {
+      throw new Error(`[Application] Service '${name}' not found`);
+    }
+    return service;
+  }
+
+  /**
+   * 销毁应用程序
+   */
+  destroy() {
+    console.log("[Application] Destroying DI container...");
+    
+    // 销毁顺序与创建顺序相反
+    if (this.uiWidgets) this.uiWidgets.destroy();
+    if (this.settingsPanel) this.settingsPanel.destroy();
+    
+    if (this.blockerFeature) this.blockerFeature.destroy();
+    if (this.focusPage) this.focusPage.destroy();
+    
+    if (this.timerService) this.timerService.destroy();
+    // TaskService 和 Storage 无需特殊销毁
+    
+    this.initialized = false;
+    console.log("[Application] DI container destroyed");
+  }
+}
+
+// 加载样式
+const styles = `/**
 * FocusPage - 专注页面样式
 * 
 * 设计原则：
@@ -7435,35 +7301,22 @@ scroll-behavior: auto !important;
 animation: none;
 }
 }`;
-        GM_addStyle(styles);
-    }
-    
-    // 向后兼容接口
-    toggleSettingsPanel() {
-        this.settingsPanel?.toggle();
-    }
-
-    /**
-     * 获取应用程序实例
-     */
-    static getInstance() {
-        if (!TomatoMonkeyApp.instance) {
-            TomatoMonkeyApp.instance = new TomatoMonkeyApp();
-        }
-        return TomatoMonkeyApp.instance;
-    }
-}
+GM_addStyle(styles);
 
 // 启动应用程序
-const app = TomatoMonkeyApp.getInstance();
-app.init();
+const app = new Application();
+app.initialize().then(() => {
+  console.log('[TomatoMonkey] Application ready');
+}).catch(error => {
+  console.error('[TomatoMonkey] Failed to initialize:', error);
+});
 
 // 将应用程序实例暴露到页面作用域以便调试
 // 使用 unsafeWindow 确保测试页面可以访问
 if (typeof unsafeWindow !== 'undefined') {
-    unsafeWindow.TomatoMonkeyApp = app;
-} else {
-    window.TomatoMonkeyApp = app;
+    unsafeWindow.app = app;
+} else if (typeof window !== 'undefined') {
+    window.app = app;
 }
 
 })();
