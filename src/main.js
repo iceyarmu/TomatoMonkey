@@ -148,8 +148,8 @@ class Application {
     await this.whitelistManager.initialize(this.storage);
     
     // 初始化功能层
-    this.focusPage.initialize(this.timerService, this.taskService);
     await this.blockerFeature.initialize();
+    this.focusPage.initialize(this.timerService, this.taskService, this.blockerFeature);
     
     // 初始化UI层
     this.uiWidgets.initialize(this.settingsPanel);

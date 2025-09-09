@@ -35,14 +35,16 @@ class FocusPage {
    * 初始化专注页面
    * @param {TimerService} timerService - 计时器服务实例
    * @param {TaskManager} taskManager - 任务管理器实例
+   * @param {BlockerFeature} blockerFeature - 拦截功能实例
    */
-  initialize(timerService, taskManager) {
+  initialize(timerService, taskManager, blockerFeature) {
     if (this.isInitialized) {
       return;
     }
 
     this.timerService = timerService;
     this.taskManager = taskManager;
+    this.blockerFeature = blockerFeature;
     this.createPageStructure();
     this.bindTimerService();
 
@@ -353,7 +355,7 @@ class FocusPage {
       // 隐藏 focus-page，但不影响计时器状态
       this.hide();
       
-      // 通知 BlockerManager 用户选择跳过当前页面
+      // 通知 BlockerFeature 用户选择跳过当前页面
       this.notifySkipBlocking();
     } else {
       console.log("[FocusPage] User cancelled skip blocking");
@@ -361,18 +363,14 @@ class FocusPage {
   }
 
   /**
-   * 通知 BlockerManager 用户选择跳过拦截
+   * 通知 BlockerFeature 用户选择跳过拦截
    */
   notifySkipBlocking() {
-    // 通过全局访问 BlockerManager
-    if (typeof window !== "undefined") {
-      const blockerManager = window.unsafeWindow?.blockerManager || window.blockerManager;
-      
-      if (blockerManager && typeof blockerManager.handleSkipBlocking === 'function') {
-        blockerManager.handleSkipBlocking(window.location.href);
-      } else {
-        console.warn("[FocusPage] Could not notify BlockerManager of skip action");
-      }
+    // 使用依赖注入的 blockerFeature
+    if (this.blockerFeature && typeof this.blockerFeature.handleSkipBlocking === 'function') {
+      this.blockerFeature.handleSkipBlocking(window.location.href);
+    } else {
+      console.warn("[FocusPage] BlockerFeature not available for skip action");
     }
   }
 

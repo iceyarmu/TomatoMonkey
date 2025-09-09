@@ -624,65 +624,6 @@
   }
 }
 
-// === 兼容性层 - Linus原则: Never break userspace ===
-
-/**
- * BlockerManager兼容类 - 包装BlockerFeature以模拟单例行为
- */
-class BlockerManager {
-  constructor() {
-    if (BlockerManager.instance) {
-      return BlockerManager.instance;
-    }
-    
-    // 创建默认依赖（临时解决方案）
-    const defaultStorage = typeof Storage !== 'undefined' 
-      ? new Storage() 
-      : (typeof StorageManager !== 'undefined' ? new StorageManager() : null);
-    
-    this._blockerFeature = new BlockerFeature(null, null, null, defaultStorage);
-    BlockerManager.instance = this;
-    return this;
-  }
-
-  // 代理所有方法到BlockerFeature
-  async initialize(timerService, whitelistManager, focusPage, storageManager) {
-    return this._blockerFeature.initialize(timerService, whitelistManager, focusPage, storageManager);
-  }
-  activateBlocking(byTimer = false) { return this._blockerFeature.activateBlocking(byTimer); }
-  deactivateBlocking() { return this._blockerFeature.deactivateBlocking(); }
-  blockCurrentPage() { return this._blockerFeature.blockCurrentPage(); }
-  unblockCurrentPage() { return this._blockerFeature.unblockCurrentPage(); }
-  shouldBlockUrl(url = null) { return this._blockerFeature.shouldBlockUrl(url); }
-  handleSkipBlocking(url) { return this._blockerFeature.handleSkipBlocking(url); }
-  getBlockingInfo() { return this._blockerFeature.getBlockingInfo(); }
-  clearCache() { return this._blockerFeature.clearCache(); }
-  destroy() { return this._blockerFeature.destroy(); }
-
-  static getInstance() {
-    if (!BlockerManager.instance) {
-      BlockerManager.instance = new BlockerManager();
-    }
-    return BlockerManager.instance;
-  }
-
-  static resetInstance() {
-    BlockerManager.instance = null;
-  }
-}
-
-// 创建兼容实例
-const blockerManager = BlockerManager.getInstance();
-
-// 浏览器环境导出
-if (typeof window !== "undefined") {
-  window.BlockerFeature = BlockerFeature;     // 新API
-  window.BlockerManager = BlockerManager;     // 兼容API
-  window.blockerManager = blockerManager;     // 兼容实例
-}
-
-// 模块导出
-
     /**
      * EventBus - Linus式事件总线
      */
@@ -2739,14 +2680,16 @@ if (typeof window !== "undefined") {
    * 初始化专注页面
    * @param {TimerService} timerService - 计时器服务实例
    * @param {TaskManager} taskManager - 任务管理器实例
+   * @param {BlockerFeature} blockerFeature - 拦截功能实例
    */
-  initialize(timerService, taskManager) {
+  initialize(timerService, taskManager, blockerFeature) {
     if (this.isInitialized) {
       return;
     }
 
     this.timerService = timerService;
     this.taskManager = taskManager;
+    this.blockerFeature = blockerFeature;
     this.createPageStructure();
     this.bindTimerService();
 
@@ -3057,7 +3000,7 @@ if (typeof window !== "undefined") {
       // 隐藏 focus-page，但不影响计时器状态
       this.hide();
       
-      // 通知 BlockerManager 用户选择跳过当前页面
+      // 通知 BlockerFeature 用户选择跳过当前页面
       this.notifySkipBlocking();
     } else {
       console.log("[FocusPage] User cancelled skip blocking");
@@ -3065,18 +3008,14 @@ if (typeof window !== "undefined") {
   }
 
   /**
-   * 通知 BlockerManager 用户选择跳过拦截
+   * 通知 BlockerFeature 用户选择跳过拦截
    */
   notifySkipBlocking() {
-    // 通过全局访问 BlockerManager
-    if (typeof window !== "undefined") {
-      const blockerManager = window.unsafeWindow?.blockerManager || window.blockerManager;
-      
-      if (blockerManager && typeof blockerManager.handleSkipBlocking === 'function') {
-        blockerManager.handleSkipBlocking(window.location.href);
-      } else {
-        console.warn("[FocusPage] Could not notify BlockerManager of skip action");
-      }
+    // 使用依赖注入的 blockerFeature
+    if (this.blockerFeature && typeof this.blockerFeature.handleSkipBlocking === 'function') {
+      this.blockerFeature.handleSkipBlocking(window.location.href);
+    } else {
+      console.warn("[FocusPage] BlockerFeature not available for skip action");
     }
   }
 
@@ -5597,8 +5536,8 @@ class Application {
     await this.whitelistManager.initialize(this.storage);
     
     // 初始化功能层
-    this.focusPage.initialize(this.timerService, this.taskService);
     await this.blockerFeature.initialize();
+    this.focusPage.initialize(this.timerService, this.taskService, this.blockerFeature);
     
     // 初始化UI层
     this.uiWidgets.initialize(this.settingsPanel);
