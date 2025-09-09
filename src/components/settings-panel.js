@@ -13,12 +13,16 @@
  * 设置面板类
  */
 class SettingsPanel {
-  constructor() {
+  constructor(taskService = null) {
     this.isVisible = false;
     this.activeTab = "todo"; // 默认激活ToDo标签页
     this.panel = null;
     this.contentArea = null;
     this.tabs = new Map(); // 存储标签页组件
+
+    // 依赖注入
+    this.taskService = taskService;
+    this.todoList = null; // TodoList组件实例
 
     // 白名单相关
     this.whitelistManager = null;
@@ -60,6 +64,7 @@ class SettingsPanel {
     this.createContentArea();
     this.setupEventListeners();
     await this.initializeWhitelist(); // 初始化白名单功能
+    this.createTodoList(); // 创建TodoList组件
     this.activateTab(this.activeTab);
 
     console.log("[SettingsPanel] Initialized successfully");
@@ -875,11 +880,50 @@ class SettingsPanel {
   }
 
   /**
+   * 创建TodoList组件 - Linus式直接方式
+   */
+  createTodoList() {
+    // 如果没有taskService，无法创建TodoList
+    if (!this.taskService) {
+      console.warn("[SettingsPanel] TaskService not available, skipping TodoList creation");
+      return;
+    }
+
+    // 直接获取容器，不使用setTimeout
+    const todoContainer = document.getElementById('todo-container');
+    if (!todoContainer) {
+      console.warn("[SettingsPanel] Todo container not found, TodoList creation skipped");
+      return;
+    }
+
+    try {
+      // 创建TodoList实例
+      this.todoList = new TodoList(todoContainer, this.taskService);
+      
+      // 注册到tabConfig
+      const todoTab = this.tabConfig.find(tab => tab.id === 'todo');
+      if (todoTab) {
+        todoTab.component = this.todoList;
+      }
+
+      console.log("[SettingsPanel] TodoList created and registered");
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to create TodoList:", error);
+    }
+  }
+
+  /**
    * 销毁设置面板
    */
   destroy() {
     // 清理撤销Toast
     this.hideUndoToast();
+
+    // 销毁TodoList组件
+    if (this.todoList) {
+      this.todoList.destroy();
+      this.todoList = null;
+    }
 
     if (this.panel) {
       this.panel.remove();

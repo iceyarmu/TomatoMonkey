@@ -24,7 +24,6 @@ class Application {
     
     // UI层
     this.settingsPanel = null;
-    this.todoList = null;
     this.focusPage = null;
     this.uiWidgets = null;
     
@@ -124,13 +123,13 @@ class Application {
   createUIComponents() {
     console.log("[Application] Creating UI components...");
     
-    // SettingsPanel - 设置面板
-    this.settingsPanel = new SettingsPanel();
+    // SettingsPanel - 设置面板（传入taskService依赖）
+    this.settingsPanel = new SettingsPanel(this.taskService);
     
     // UIWidgets - 全局UI小部件
     this.uiWidgets = new UIWidgets();
     
-    // 注意：TodoList需要容器元素，在main.js中创建
+    // 注意：TodoList现在由SettingsPanel管理
     
     console.log("[Application] UI components created");
   }
@@ -177,7 +176,6 @@ class Application {
     console.log("[Application] Destroying DI container...");
     
     // 销毁顺序与创建顺序相反
-    if (this.todoList) this.todoList.destroy();
     if (this.uiWidgets) this.uiWidgets.destroy();
     if (this.settingsPanel) this.settingsPanel.destroy();
     
@@ -191,17 +189,6 @@ class Application {
     console.log("[Application] DI container destroyed");
   }
 
-  /**
-   * 创建TodoList - 需要DOM元素
-   */
-  createTodoList(container) {
-    if (!container) {
-      throw new Error("[Application] TodoList container required");
-    }
-    
-    this.todoList = new TodoList(container, this.taskService);
-    return this.todoList;
-  }
 }
 
 // 浏览器环境导出

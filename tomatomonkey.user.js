@@ -41,7 +41,6 @@
     
     // UI层
     this.settingsPanel = null;
-    this.todoList = null;
     this.focusPage = null;
     this.uiWidgets = null;
     
@@ -141,13 +140,13 @@
   createUIComponents() {
     console.log("[Application] Creating UI components...");
     
-    // SettingsPanel - 设置面板
-    this.settingsPanel = new SettingsPanel();
+    // SettingsPanel - 设置面板（传入taskService依赖）
+    this.settingsPanel = new SettingsPanel(this.taskService);
     
     // UIWidgets - 全局UI小部件
     this.uiWidgets = new UIWidgets();
     
-    // 注意：TodoList需要容器元素，在main.js中创建
+    // 注意：TodoList现在由SettingsPanel管理
     
     console.log("[Application] UI components created");
   }
@@ -194,7 +193,6 @@
     console.log("[Application] Destroying DI container...");
     
     // 销毁顺序与创建顺序相反
-    if (this.todoList) this.todoList.destroy();
     if (this.uiWidgets) this.uiWidgets.destroy();
     if (this.settingsPanel) this.settingsPanel.destroy();
     
@@ -208,17 +206,6 @@
     console.log("[Application] DI container destroyed");
   }
 
-  /**
-   * 创建TodoList - 需要DOM元素
-   */
-  createTodoList(container) {
-    if (!container) {
-      throw new Error("[Application] TodoList container required");
-    }
-    
-    this.todoList = new TodoList(container, this.taskService);
-    return this.todoList;
-  }
 }
 
 // 浏览器环境导出
@@ -4052,12 +4039,16 @@ if (typeof window !== "undefined") {
  * 设置面板类
  */
 class SettingsPanel {
-  constructor() {
+  constructor(taskService = null) {
     this.isVisible = false;
     this.activeTab = "todo"; // 默认激活ToDo标签页
     this.panel = null;
     this.contentArea = null;
     this.tabs = new Map(); // 存储标签页组件
+
+    // 依赖注入
+    this.taskService = taskService;
+    this.todoList = null; // TodoList组件实例
 
     // 白名单相关
     this.whitelistManager = null;
@@ -4099,6 +4090,7 @@ class SettingsPanel {
     this.createContentArea();
     this.setupEventListeners();
     await this.initializeWhitelist(); // 初始化白名单功能
+    this.createTodoList(); // 创建TodoList组件
     this.activateTab(this.activeTab);
 
     console.log("[SettingsPanel] Initialized successfully");
@@ -4914,11 +4906,50 @@ class SettingsPanel {
   }
 
   /**
+   * 创建TodoList组件 - Linus式直接方式
+   */
+  createTodoList() {
+    // 如果没有taskService，无法创建TodoList
+    if (!this.taskService) {
+      console.warn("[SettingsPanel] TaskService not available, skipping TodoList creation");
+      return;
+    }
+
+    // 直接获取容器，不使用setTimeout
+    const todoContainer = document.getElementById('todo-container');
+    if (!todoContainer) {
+      console.warn("[SettingsPanel] Todo container not found, TodoList creation skipped");
+      return;
+    }
+
+    try {
+      // 创建TodoList实例
+      this.todoList = new TodoList(todoContainer, this.taskService);
+      
+      // 注册到tabConfig
+      const todoTab = this.tabConfig.find(tab => tab.id === 'todo');
+      if (todoTab) {
+        todoTab.component = this.todoList;
+      }
+
+      console.log("[SettingsPanel] TodoList created and registered");
+    } catch (error) {
+      console.error("[SettingsPanel] Failed to create TodoList:", error);
+    }
+  }
+
+  /**
    * 销毁设置面板
    */
   destroy() {
     // 清理撤销Toast
     this.hideUndoToast();
+
+    // 销毁TodoList组件
+    if (this.todoList) {
+      this.todoList.destroy();
+      this.todoList = null;
+    }
 
     if (this.panel) {
       this.panel.remove();
@@ -5726,26 +5757,11 @@ class TomatoMonkeyApp {
     setupUI() {
         console.log('[TomatoMonkey] Setting up UI...');
         
-        // 直接使用DI容器的服务（UIWidgets已在Application中自动初始化）
+        // 直接使用DI容器的服务（UIWidgets和TodoList已在Application中自动初始化）
         this.settingsPanel = this.app.settingsPanel;
         this.taskManager = this.app.taskService;
         
-        // 创建TodoList组件（需要DOM容器，延后创建）
-        this.setupTodoList();
-        
         console.log('[TomatoMonkey] UI setup complete');
-    }
-    
-    setupTodoList() {
-        // 等待DOM元素创建
-        setTimeout(() => {
-            const todoContainer = document.getElementById('todo-container');
-            if (todoContainer) {
-                const todoList = this.app.createTodoList(todoContainer);
-                this.app.settingsPanel.registerTabComponent('todo', todoList);
-                console.log('[TomatoMonkey] TodoList component created');
-            }
-        }, 100);
     }
     
 

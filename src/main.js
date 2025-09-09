@@ -55,26 +55,11 @@ class TomatoMonkeyApp {
     setupUI() {
         console.log('[TomatoMonkey] Setting up UI...');
         
-        // 直接使用DI容器的服务（UIWidgets已在Application中自动初始化）
+        // 直接使用DI容器的服务（UIWidgets和TodoList已在Application中自动初始化）
         this.settingsPanel = this.app.settingsPanel;
         this.taskManager = this.app.taskService;
         
-        // 创建TodoList组件（需要DOM容器，延后创建）
-        this.setupTodoList();
-        
         console.log('[TomatoMonkey] UI setup complete');
-    }
-    
-    setupTodoList() {
-        // 等待DOM元素创建
-        setTimeout(() => {
-            const todoContainer = document.getElementById('todo-container');
-            if (todoContainer) {
-                const todoList = this.app.createTodoList(todoContainer);
-                this.app.settingsPanel.registerTabComponent('todo', todoList);
-                console.log('[TomatoMonkey] TodoList component created');
-            }
-        }, 100);
     }
     
 
